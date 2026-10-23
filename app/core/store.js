@@ -48,10 +48,12 @@ export const isNetworkError = (err) => err instanceof TypeError;
  * @param {string} opts.file             file name next to the goals file, e.g. "tasks.json"; null = the goals file itself
  * @param {string} opts.ls               localStorage prefix ("goals" keeps the keys of earlier versions)
  * @param {() => D} opts.empty           document to use when the file does not exist yet (created on the first save)
+ * @param {boolean} [opts.required]      the file must exist: if it is missing, the settings are wrong (no empty document)
+ * @param {() => boolean} [opts.ready]   saving is allowed (e.g. only once the required file was found)
  * @param {() => RepoConfig|null} opts.cfg
  * @param {() => void} opts.onChange
  */
-export function createStore({ mod, file, ls, empty, cfg, onChange }) {
+export function createStore({ mod, file, ls, empty, cfg, onChange, required = false, ready = () => true }) {
   const keys = { cache: `${ls}.cache`, pending: `${ls}.pending` };
   const s = {
     /** @type {D} */ base: empty(),
@@ -87,7 +89,10 @@ export function createStore({ mod, file, ls, empty, cfg, onChange }) {
       const { text, sha } = await readFile(t);
       return { doc: mod.normalize(JSON.parse(text)), sha };
     } catch (err) {
-      if (err instanceof GitHubError && err.status === 404) return { doc: empty(), sha: null };
+      if (err instanceof GitHubError && err.status === 404) {
+        if (required) throw new Error(`${t.path} was not found in ${t.owner}/${t.repo}. Check the repo and file in More → GitHub connection.`);
+        return { doc: empty(), sha: null };
+      }
       throw err;
     }
   }
@@ -120,7 +125,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange }) {
 
   async function flush() {
     const t = target();
-    if (s.saving || !s.pending.length || !t || !s.loaded) return;
+    if (s.saving || !s.pending.length || !t || !s.loaded || !ready()) return;
     s.saving = true;
     onChange();
     const batch = s.pending.slice();
