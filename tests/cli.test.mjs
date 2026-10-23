@@ -1,40 +1,9 @@
-// CLI tests against temporary git repos (remote + two clones): `node --test tests/`
+// CLI tests against temporary git repos (remote + two clones): `node --test tests/*.test.mjs`
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-
-const CLI = new URL('../cli/compass.mjs', import.meta.url).pathname;
-
-/** @param {string} cwd @param {string[]} args */
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-
-function setup() {
-  const dir = mkdtempSync(join(tmpdir(), 'compass-cli-'));
-  git(dir, 'init', '-q', '--bare', '-b', 'main', 'remote.git');
-  for (const name of ['a', 'b']) {
-    git(dir, 'clone', '-q', 'remote.git', name);
-    git(join(dir, name), 'config', 'user.email', 'test@example.com');
-    git(join(dir, name), 'config', 'user.name', 'test');
-    git(join(dir, name), 'checkout', '-q', '-B', 'main');
-  }
-  const doc = { version: 1, timeZone: 'UTC', categories: ['Sport'], goals: [] };
-  writeFileSync(join(dir, 'a', 'goals.json'), JSON.stringify(doc, null, 2) + '\n');
-  git(join(dir, 'a'), 'add', '.');
-  git(join(dir, 'a'), 'commit', '-qm', 'init');
-  git(join(dir, 'a'), 'push', '-q', '-u', 'origin', 'main');
-  git(join(dir, 'b'), 'pull', '-q', 'origin', 'main');
-  git(join(dir, 'b'), 'branch', '-q', '--set-upstream-to=origin/main');
-  const config = join(dir, 'config.json');
-  writeFileSync(config, JSON.stringify({ repo: join(dir, 'a'), goals: 'goals.json' }));
-  /** @param {...string} args */
-  const run = (...args) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', env: { ...process.env, COMPASS_CONFIG: config } });
-  /** @param {string} name */
-  const read = (name) => JSON.parse(readFileSync(join(dir, name, 'goals.json'), 'utf8'));
-  return { dir, run, read };
-}
+import { git, setup } from './helpers.mjs';
 
 test('add, inc and done write with commit and push', () => {
   const { dir, run } = setup();
