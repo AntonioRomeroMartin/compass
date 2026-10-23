@@ -1027,11 +1027,13 @@ function init() {
       refresh();
     }
   });
-  // Day/week change (in the file's time zone) even if the app stays open.
+  // Every minute while it is on screen: fetch what other devices or the agent changed, and redraw
+  // when the day or week changes (in the file's time zone).
   let lastKeys = JSON.stringify(periodKeys(new Date(), tz()));
   setInterval(() => {
     const keys = JSON.stringify(periodKeys(new Date(), tz()));
     if (keys !== lastKeys) { lastKeys = keys; render(); }
+    if (document.visibilityState === 'visible' && state.cfg) refresh();
   }, 60000);
 
   render();

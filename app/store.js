@@ -93,7 +93,8 @@ export function createStore({ mod, file, ls, empty, cfg, onChange }) {
   }
 
   async function refresh() {
-    if (!target()) return;
+    // While saving, the save itself brings the new version (and a read started now could land after it, older).
+    if (!target() || s.saving) return;
     try {
       const { doc, sha } = await read();
       s.base = doc;
