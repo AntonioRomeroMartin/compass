@@ -223,3 +223,15 @@ test('domains: list, add and edit (domains.json is created on the first write)',
   assert.match(out, /^Not registered \(used by goals or tasks\): Sport$/m);
   assert.match(git(join(dir, 'a'), 'log', '-1', '--format=%s'), /^domains: edited “studies\/course-a”, paths “studies\/course-a”$/m);
 });
+
+test('task delete needs --yes and removes the task, closed ones too', () => {
+  const { run, runAll, read } = setupWithDomains();
+  run('task', 'add', 'Old errand', '--domain', 'sport');
+  run('task', 'done', 'errand');
+  const refused = runAll('task', 'delete', 'errand');
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /for good.*--yes/);
+  assert.equal(read('a', 'tasks.json').tasks.length, 1);
+  run('task', 'delete', 'errand', '--yes');
+  assert.deepEqual(read('a', 'tasks.json').tasks, []);
+});

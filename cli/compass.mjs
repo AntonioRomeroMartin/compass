@@ -45,6 +45,7 @@ Usage:
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE] [--goal G]
                    [--ongoing PATH] [--notes T] [--focus]
   compass task done|undo|drop|focus|unfocus|show <task>
+  compass task delete <task> --yes      for good (drop keeps a record)
   compass task drop <task> --stop       a repeating task: no next occurrence
   compass task move <task> [DATE]       default: tomorrow
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE] [--goal G]
@@ -74,7 +75,7 @@ Config: ~/.config/compass/config.json →
   {"repo": "<data repo checkout>", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json"}`;
 
 /** Flags that never take a value. */
-const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help']);
+const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes']);
 
 /** @param {string[]} argv */
 function parse(argv) {
@@ -425,7 +426,7 @@ function task(ctx, sub, rest, flags) {
       return { tasks: [{ type: 'add', task: t }, ...(flags.focus ? [{ type: /** @type {const} */ ('focus'), id: t.id, focus: true }] : [])] };
     };
   } else {
-    const t = findTask(ctx.tasks, rest[0], sub === 'undo');
+    const t = findTask(ctx.tasks, rest[0], sub === 'undo' || sub === 'delete');
     const tid = t.id;
     id = tid;
     /** @param {TasksDoc} fresh */
@@ -456,6 +457,11 @@ function task(ctx, sub, rest, flags) {
           if (cur.status === 'open') return { tasks: [] };
           return { tasks: [{ type: 'reopen', id: tid }], goals: cur.status === 'done' ? goalCredit(ctx, goals, cur.goal, -1) : [] };
         };
+        break;
+      case 'delete':
+        // Permanent (no record left); the app asks first, here it takes an explicit --yes.
+        if (!flags.yes) fail(`delete removes “${t.title}” for good; to keep a record use “compass task drop”. Add --yes to delete it.`);
+        build = () => ({ tasks: [{ type: 'delete', id: tid }] });
         break;
       case 'move': {
         const due = date(rest[1] ?? 'tomorrow');
