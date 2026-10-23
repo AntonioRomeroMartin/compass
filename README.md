@@ -1,6 +1,6 @@
 # Compass
 
-A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearly and with a deadline) and by category. Anyone can use it with **their own private data**.
+A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearly and with a deadline) and by category, plus a command line (`compass`) that also handles **tasks** and **domains** (areas such as work, sport or studies) and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
 
 ## How to use it
 
@@ -18,6 +18,12 @@ A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearl
 - This repo contains code only: no categories, goals or anyone's data.
 
 ## Data format
+
+Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `domains.json`), saved with
+2-space indentation so diffs stay readable. Commits that change data start with the file's prefix (`goals:`,
+`tasks:`, `domains:`).
+
+### Goals (`goals.json`)
 
 ```json
 {
@@ -39,30 +45,104 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`, `o
 - **Sub-goals** (optional): steps towards a goal, ticked off on its card. `done` lists the period keys in which each one was completed, so a habit's sub-goals start unticked every period.
 - **With deadline**: accumulates under `once` and moves to Past the day after `deadline`.
 
-## Command line (optional)
+### Domains (`domains.json`)
+
+```json
+{
+  "version": 1,
+  "domains": [
+    { "id": "studies", "name": "Studies", "paths": ["~/projects/studies"], "color": "#3366aa" },
+    { "id": "studies/course-a", "name": "Course A", "parent": "studies", "paths": ["~/projects/studies/course-a"] },
+    { "id": "sport", "name": "Sport" }
+  ]
+}
+```
+
+- `id` is hierarchical: `studies/course-a` is a subdomain of `studies` (`parent` is derived from the id when it is
+  missing). `paths` (folders where that domain's work happens, absolute or starting with `~`) and `color` are optional.
+- **Domains and goal categories are one list**: a goal's `category` is the id or the name of a domain
+  (`Sport` and `sport` both match the `sport` domain). Categories that are not registered keep working as
+  plain labels, and `compass domains` lists them so they can be registered. Nothing needs migrating.
+- A folder belongs to the domain with the **longest** path that contains it (`~/projects/studies/course-a/week-3`
+  → `studies/course-a`; whole folder names only). A view scoped to a domain shows that domain and its subdomains
+  in full, plus the dated items of its parents (a course sees the deadlines of its degree, not its siblings' tasks).
+
+### Tasks (`tasks.json`)
+
+```json
+{
+  "version": 1,
+  "timeZone": "Area/City",
+  "tasks": [{ "id": "t_…", "title": "…", "domain": "studies/course-a", "due": "2026-10-30", "notes": null,
+              "subtasks": [{ "id": "s_…", "title": "…", "done": false }],
+              "repeat": { "type": "weekly", "days": [1, 4] }, "focus": false, "goal": "g_…",
+              "ongoing": "notes/draft.md", "status": "open", "createdAt": "…", "doneAt": null }]
+}
+```
+
+- `domain` is required; `due` (`YYYY-MM-DD`, a civil day in the file's `timeZone`) is optional. There are no
+  priorities or time estimates: **focus** (⭐) marks what matters now, at most 3 open tasks at a time.
+- `status`: `open`, `done` or `dropped`; `doneAt` is when it was closed.
+- `repeat`: `{"type": "days", "every": N}`, `{"type": "weekly", "days": [1…7]}` (ISO weekdays, 1 = Monday) or
+  `{"type": "monthly", "day": 1…31}` (past the end of a short month it falls on its last day). Closing a repeating
+  task creates the next occurrence as a new task (the closed one keeps its id in `next`). The next date counts
+  from the due date, or from today when the task was late, so a late completion does not pile up overdue copies.
+- `goal`: completing the task adds 1 to that goal in its current period, in the same commit; undoing it takes the 1 back.
+- `ongoing`: path of a text file with the state of work in progress; "today" lists these tasks even without a date.
+- When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
+
+## Command line
 
 `cli/compass.mjs` reads and changes the same data from a local git checkout of your data repo, with the same
 operations as the app (it pulls before reading, commits and pushes after writing, and reapplies its change if the
-remote moved meanwhile). Needs Node 20+.
+remote moved meanwhile; a task and its linked goal change in one commit). A missing `tasks.json` or `domains.json`
+is created on the first write. Needs Node 20+.
 
 ```bash
 ln -s "$PWD/cli/compass.mjs" ~/.local/bin/compass
 mkdir -p ~/.config/compass
-echo '{ "repo": "/path/to/your/data-repo", "goals": "goals.json" }' > ~/.config/compass/config.json
-compass today                 # goals for today and this week, deadlines within 7 days
-compass goal inc "workout" 1      # a goal by id or part of its title
-compass help
+echo '{ "repo": "/path/to/your/data-repo", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json" }' \
+  > ~/.config/compass/config.json
+compass domain add studies --name Studies --path ~/projects/studies
+compass task add "Problem set 3" --domain studies --due fri --goal "study sessions"
+compass task add "Water plants" --domain home --repeat "every 3 days"
+compass task done "problem set"       # a task by id or part of its title
+compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none
+compass tasks --due week              # also: --domain D, --cwd PATH, --due today|overdue, --all
+compass today --cwd "$PWD"            # what matters in the domain of this folder
+compass help                          # every command (goals, sub-tasks, focus, edit…)
 ```
+
+`compass today` is meant to be read at the start of a session (for example by an agent's start hook):
+
+```text
+Today · Fri 23 Oct · 2026-10-23 · 2026-W43 (Area/City)
+Scope: Studies › Course A [studies/course-a] + dated items of Studies (from --cwd)
+Focus
+  ⭐ [t_…] Lab report — due 2026-10-24 (tomorrow) · studies/course-a
+Studies › Course A [studies/course-a]
+  · [t_…] Problem set 3 — due 2026-10-21 (2 d late) · +1 goal “Study sessions”
+  ↳ ongoing [t_…] Thesis draft → notes/thesis.md
+Studies [studies] · parent, dated only
+  · [t_…] Exam registration — due 2026-10-25 (in 2 d)
+  · [g_…] Study sessions — 2/5 · week · habit · studies
+```
+
+It shows the focus tasks, then by domain: tasks that are late, due today or this week (tasks without a date only
+appear through focus or `ongoing`), goals of the day and the week, and deadlines within 7 days. Its `git pull`
+gives up after `--timeout` seconds (3 by default) and the view uses the local copy, with a one-line warning.
 
 ## Development
 
 Plain HTML + JS, no build step, with `// @ts-check` and JSDoc types.
 
-- `lib/`: shared logic (period keys, data model and operations, GitHub API), used by the app and the CLI.
+- `lib/`: shared logic, used by the app and the CLI: period keys and civil dates (`period.js`), the data model and
+  operations of each data file (`goals.js`, `tasks.js`, `domains.js`), the Today view (`today.js`) and the GitHub
+  API (`github.js`).
 - `app/`: the PWA (`index.html` and `sw.js` stay at the root).
 - `cli/`: the command line.
 
 ```bash
 python3 -m http.server 8000   # open http://localhost:8000
-node --test tests/            # logic and CLI tests
+node --test tests/*.test.mjs  # logic and CLI tests (the CLI ones use temporary git repos)
 ```
