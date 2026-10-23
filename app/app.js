@@ -39,6 +39,8 @@ function renderTabs() {
     if (tab === state.tab) btn.setAttribute('aria-current', 'page');
     else btn.removeAttribute('aria-current');
   }
+  if (state.tab === 'more') $('open-more').setAttribute('aria-current', 'page');
+  else $('open-more').removeAttribute('aria-current');
   for (const sec of document.querySelectorAll('[data-view-of]')) {
     /** @type {HTMLElement} */ (sec).hidden = /** @type {HTMLElement} */ (sec).dataset.viewOf !== state.tab;
   }
@@ -174,6 +176,7 @@ function init() {
     });
   }
   $('refresh').addEventListener('click', refresh);
+  $('open-more').addEventListener('click', () => go('more'));
   $('settings').addEventListener('click', openSettings);
   $('manage').addEventListener('click', openManage);
   $('open-manage').addEventListener('click', openManage);

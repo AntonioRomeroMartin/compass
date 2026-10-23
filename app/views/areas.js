@@ -4,7 +4,6 @@ import * as domainsLib from '../../lib/domains.js';
 import { areaIds, canEdit, current, domainsStore, persist, render, state, tasksStore, tz } from '../core/data.js';
 import { $, chipPicker, h } from '../core/ui.js';
 import { modulesOf } from '../modules/index.js';
-import { openTaskForm } from '../modules/tasks/view.js';
 import { isExpired } from '../../lib/goals.js';
 
 export function renderAreas() {
@@ -65,7 +64,7 @@ export function openArea(id) {
   window.scrollTo(0, 0);
 }
 
-/** Page of one area: "+ Task", the sub-area filter, then the sections of each of its modules. @param {HTMLElement} view @param {string} id */
+/** Page of one area: the sub-area filter, then one block per module (Tasks, Goals…), each with its "+". @param {HTMLElement} view @param {string} id */
 export function renderArea(view, id) {
   const doms = domainsStore.current();
   const area = /** @type {import('../../lib/domains.js').Domain} */ (domainsLib.find(doms, id));
@@ -77,7 +76,6 @@ export function renderArea(view, id) {
       'div',
       { class: 'area-bar' },
       h('button', { class: 'link back', onclick: () => openArea('') }, '‹ Areas'),
-      h('button', { class: 'btn primary', disabled: !canEdit(), onclick: () => openTaskForm(undefined, scopeId) }, '+ Task'),
     ),
   );
   if (kids.length) {
@@ -90,7 +88,14 @@ export function renderArea(view, id) {
     view.append(box);
   }
   const scope = { id: scopeId, ids: areaIds(scopeId), showSub: scopeId === id && kids.length > 0 };
-  for (const m of modulesOf(id)) view.append(...m.areaSections(scope));
+  for (const m of modulesOf(id)) {
+    view.append(h(
+      'section',
+      { class: 'module-block' },
+      h('div', { class: 'block-head' }, h('h2', {}, m.title), h('button', { class: 'btn small', disabled: !canEdit(), onclick: () => m.add(scopeId) }, `+ ${m.addLabel}`)),
+      ...m.areaSections(scope),
+    ));
+  }
 }
 
 /** Sidebar (wide screens): the areas tree under "Areas", closed by default; an area's name folds its sub-areas. */

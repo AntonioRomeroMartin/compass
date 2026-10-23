@@ -23,8 +23,8 @@ export function toggleTask(t) {
   if (g) dispatchGoals({ type: 'inc', id: g.id, key: goalKey(g, now, tz()), delta: t.status === 'open' ? 1 : -1 });
 }
 
-/** @param {Task} t @param {boolean} [showArea] */
-export function taskRow(t, showArea = false) {
+/** @param {Task} t @param {boolean} [showArea] @param {boolean} [short] area chip with the sub-area's name only (inside its parent's page) */
+export function taskRow(t, showArea = false, short = false) {
   const doms = domainsStore.current();
   const d = t.due ? daysUntil(t.due, new Date(), tz()) : null;
   const when = d === null ? null : d < 0 ? `${-d}d late` : d === 0 ? 'today' : d === 1 ? 'tomorrow' : t.due;
@@ -38,7 +38,7 @@ export function taskRow(t, showArea = false) {
       'span',
       { class: 'task-meta' },
       t.subtasks.length ? h('span', { class: 'chip muted' }, `${t.subtasks.filter((x) => x.done).length}/${t.subtasks.length}`) : null,
-      showArea ? h('span', { class: 'chip muted' }, domainsLib.label(doms, domainsLib.canonical(doms, t.domain)) || t.domain) : null,
+      showArea ? h('span', { class: 'chip muted' }, (short ? domainsLib.find(doms, domainsLib.canonical(doms, t.domain))?.name : domainsLib.label(doms, domainsLib.canonical(doms, t.domain))) || t.domain) : null,
       when ? h('span', { class: d !== null && d < 0 ? 'chip danger' : d === 0 ? 'chip warn' : 'chip' }, when) : null,
       t.repeat ? h('span', { class: 'chip muted', title: tasksLib.repeatText(t.repeat) }, '↻') : null,
     ),
@@ -243,15 +243,15 @@ export function areaSections({ id, ids, showSub }) {
   const out = [];
   for (const [title, list] of buckets) {
     if (!list.length) continue;
-    out.push(h('section', { class: 'group' }, h('h2', {}, title, h('span', { class: 'sub' }, String(list.length))),
-      h('ul', { class: 'rows' }, ...list.map((t) => taskRow(t, showSub && domainsLib.canonical(doms, t.domain) !== id)))));
+    out.push(h('section', { class: 'group sub-group' }, h('h3', {}, title, h('span', { class: 'sub' }, String(list.length))),
+      h('ul', { class: 'rows' }, ...list.map((t) => taskRow(t, showSub && domainsLib.canonical(doms, t.domain) !== id, true)))));
   }
   if (!open.length) out.push(h('p', { class: 'empty small' }, 'No open tasks here.'));
   if (recent.length) {
     out.push(h(
       'details',
-      { class: 'group undated' },
-      h('summary', {}, h('h2', {}, 'Done in the last 7 days', h('span', { class: 'sub' }, String(recent.length)))),
+      { class: 'group sub-group undated' },
+      h('summary', {}, h('h3', {}, 'Done in the last 7 days', h('span', { class: 'sub' }, String(recent.length)))),
       h('ul', { class: 'rows' }, ...recent.map((t) => taskRow(t))),
     ));
   }

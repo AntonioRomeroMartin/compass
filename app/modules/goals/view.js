@@ -1,6 +1,7 @@
 // @ts-check
 // Goals module (app side): the Goals page, goal cards and sheet, categories, and its parts of the area page and the Home card.
-import { canEdit, current, dispatchGoals, goalsStore, inAreas, state, tz } from '../../core/data.js';
+import * as domainsLib from '../../../lib/domains.js';
+import { areaIds, canEdit, current, dispatchGoals, domainsStore, goalsStore, inAreas, state, tz } from '../../core/data.js';
 import { $, editRow, fmt, h } from '../../core/ui.js';
 import { categoryUsage, goalKey, isDone, isExpired, newId, subgoalsDone } from '../../../lib/goals.js';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey } from '../../../lib/period.js';
@@ -10,6 +11,39 @@ import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey } from 
 /** @typedef {import('../../../lib/period.js').Horizon} Horizon */
 
 /** @type {Record<Horizon, string>} */
+// A goal's category is an area (domain id or name, see lib/domains.js). Labels that match no area keep
+// working as they are, so goals created before the areas existed still show up.
+
+/** Area id of a goal's category, or the text itself when it matches no area. @param {string} category */
+const areaOf = (category) => domainsLib.canonical(domainsStore.current(), category) || category;
+
+/** "University › AM" for an area id; the text itself otherwise. @param {string} category */
+export const categoryLabel = (category) => domainsLib.label(domainsStore.current(), areaOf(category)) || category;
+
+/** Choices for a category: the areas (sub-areas indented), then labels in use that match no area. @returns {[string, string][]} */
+function categoryOptions() {
+  const doms = domainsStore.current();
+  /** @type {[string, string][]} */
+  const out = [];
+  /** @param {string} parent @param {number} depth */
+  const walk = (parent, depth) => {
+    for (const d of doms.domains.filter((x) => (x.parent ?? '') === parent)) {
+      out.push([d.id, `${'\u2003'.repeat(depth)}${d.name}`]);
+      walk(d.id, depth + 1);
+    }
+  };
+  walk('', 0);
+  const known = new Set(out.map(([id]) => id));
+  const doc = current();
+  for (const c of [...doc.categories, ...doc.goals.map((g) => g.category)]) {
+    if (c && !known.has(areaOf(c))) { out.push([c, c]); known.add(c); }
+  }
+  return out;
+}
+
+/** Does a goal fall in the area chosen in the filter (its sub-areas included)? @param {Goal} g @param {string} filter */
+const inFilter = (g, filter) => !filter || (domainsLib.find(domainsStore.current(), filter) ? inAreas(areaIds(filter), g.category) : g.category === filter);
+
 export const HORIZON_LABEL = {
   day: 'Today',
   week: 'This week',
@@ -58,11 +92,12 @@ export function renderToolbar() {
     btn.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (btn).dataset.view === state.view));
   }
   const select = /** @type {HTMLSelectElement} */ ($('filter'));
+  const options = categoryOptions();
   select.replaceChildren(
-    h('option', { value: '' }, 'All categories'),
-    ...doc.categories.map((c) => h('option', { value: c }, c)),
+    h('option', { value: '' }, 'All areas'),
+    ...options.map(([v, text]) => h('option', { value: v }, text)),
   );
-  if (state.filter && !doc.categories.includes(state.filter)) state.filter = '';
+  if (state.filter && !options.some(([v]) => v === state.filter)) state.filter = '';
   select.value = state.filter;
   /** @type {HTMLSelectElement} */ ($('scope')).value = state.scope;
 }
@@ -77,7 +112,7 @@ export function renderList() {
     state.scope === 'archived' ? !!g.archived
       : state.scope === 'past' ? !g.archived && isExpired(g, now, zone)
       : !g.archived && !isExpired(g, now, zone);
-  const goals = doc.goals.filter((g) => inScope(g) && (!state.filter || g.category === state.filter));
+  const goals = doc.goals.filter((g) => inScope(g) && inFilter(g, state.filter));
 
   if (!goalsStore.state.loaded && !goalsStore.state.fetchedAt) {
     main.append(h('p', { class: 'empty' }, state.cfg ? 'Loading goals…' : 'No data yet.'));
@@ -109,11 +144,11 @@ export function renderList() {
       groups.push([HORIZON_LABEL[hz], sub, list]);
     }
   } else {
-    for (const cat of doc.categories) {
-      const list = goals.filter((g) => g.category === cat);
+    for (const [cat] of categoryOptions()) {
+      const list = goals.filter((g) => areaOf(g.category) === cat);
       if (!list.length) continue;
       list.sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon));
-      groups.push([cat, '', list]);
+      groups.push([categoryLabel(cat), '', list]);
     }
   }
 
@@ -145,7 +180,7 @@ export function card(g, now) {
     { class: 'chips' },
     // Active: the view already groups by horizon or category, so the other one is shown.
     // Past and archived: single list, both are shown.
-    state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, g.category) : null,
+    state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, categoryLabel(g.category)) : null,
     state.scope !== 'active' || state.view === 'category' ? h('span', { class: 'chip muted' }, when) : null,
     g.repeat && state.scope === 'active' ? h('span', { class: 'chip muted' }, '↻ Repeats') : null,
     expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : key) : null,
@@ -260,8 +295,8 @@ export function askValue(g, key, value) {
 
 export const NEW_CATEGORY = '__new__';
 
-/** @param {Goal} [goal] */
-export function openGoalForm(goal) {
+/** @param {Goal} [goal] @param {string} [area] area chosen in advance (e.g. from an area's page) */
+export function openGoalForm(goal, area = '') {
   if (!canEdit()) return;
   const dialog = /** @type {HTMLDialogElement} */ ($('goal-dialog'));
   const form = /** @type {HTMLFormElement} */ ($('goal-form'));
@@ -271,11 +306,12 @@ export function openGoalForm(goal) {
   $('goal-dialog-title').textContent = goal ? 'Edit goal' : 'New goal';
   /** @type {HTMLElement} */ (dialog.querySelector('.kind-switch')).hidden = !!goal;
   f.title.value = goal?.title ?? '';
+  const options = categoryOptions();
   f.category.replaceChildren(
-    ...doc.categories.map((c) => h('option', { value: c }, c)),
-    h('option', { value: NEW_CATEGORY }, '+ New category…'),
+    ...options.map(([v, text]) => h('option', { value: v }, text)),
+    h('option', { value: NEW_CATEGORY }, '+ Other label…'),
   );
-  f.category.value = goal?.category ?? (state.filter || doc.categories[0] || NEW_CATEGORY);
+  f.category.value = goal ? areaOf(goal.category) : area || state.filter || options[0]?.[0] || NEW_CATEGORY;
   f.newCategory.value = '';
   f.horizon.value = goal?.horizon ?? 'week';
   f.target.value = goal?.target ?? '';
@@ -463,8 +499,8 @@ function liveGoals(ids) {
 
 /** @param {import('../index.js').AreaScope} scope */
 export function areaSections({ ids }) {
-  const goals = liveGoals(ids);
-  return goals.length ? [h('section', { class: 'group' }, h('h2', {}, 'Goals'), h('ul', { class: 'rows' }, ...goals.map(goalRow)))] : [];
+  const goals = liveGoals(ids).sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon));
+  return goals.length ? [h('ul', { class: 'rows' }, ...goals.map(goalRow))] : [h('p', { class: 'empty small' }, 'No active goals in this area.')];
 }
 
 /**
