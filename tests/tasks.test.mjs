@@ -138,17 +138,21 @@ test('tasks: edit, subtasks, normalize and commit message', () => {
   assert.equal(tasks.commitMessage([{ type: 'done', id: 'a', at: 'x', today: FRI, nextId: null }], doc, doc), 'tasks: done “Write report”');
 });
 
-test('due windows: overdue, today (late included) and this week', () => {
+test('due windows: overdue, today (late included), this week and the next 7 days', () => {
   const late = task('a', { due: '2026-10-20' });
   const today = task('b', { due: FRI });
   const sunday = task('c', { due: '2026-10-25' });
   const monday = task('d', { due: '2026-10-26' });
   const undated = task('e');
-  /** @param {'overdue'|'today'|'week'} w */
-  const ids = (w) => [late, today, sunday, monday, undated].filter((t) => tasks.isDueWithin(t, w, FRI)).map((t) => t.id);
+  const nextFri = task('f', { due: '2026-10-30' });
+  const nextSat = task('g', { due: '2026-10-31' });
+  /** @param {'overdue'|'today'|'week'|'next7'} w */
+  const ids = (w) => [late, today, sunday, monday, undated, nextFri, nextSat].filter((t) => tasks.isDueWithin(t, w, FRI)).map((t) => t.id);
   assert.deepEqual(ids('overdue'), ['a']);
   assert.deepEqual(ids('today'), ['a', 'b']);
   assert.deepEqual(ids('week'), ['a', 'b', 'c']);
+  // On a Friday, the next 7 days reach next Friday.
+  assert.deepEqual(ids('next7'), ['a', 'b', 'c', 'd', 'f']);
 });
 
 const REGISTRY = domains.normalize({
@@ -235,6 +239,7 @@ test('today: focus, then by domain; a subdomain sees the dated items of its pare
     { type: 'add', task: task('ongoing', { domain: 'studies/course-a', ongoing: 'notes/a.md' }) },
     { type: 'add', task: task('sibling', { domain: 'studies/course-b', due: FRI }) },
     { type: 'add', task: task('nextWeek', { domain: 'studies/course-a', due: '2026-10-26' }) },
+    { type: 'add', task: task('inTwoWeeks', { domain: 'studies/course-a', due: '2026-11-06' }) },
     { type: 'add', task: task('undated', { domain: 'studies/course-a' }) },
     { type: 'add', task: task('focusHere', { domain: 'studies/course-a' }) },
     { type: 'add', task: task('focusThere', { domain: 'sport', due: FRI }) },
@@ -254,7 +259,8 @@ test('today: focus, then by domain; a subdomain sees the dated items of its pare
   assert.equal(view.focusElsewhere, 1);
   assert.deepEqual(view.groups.map((g) => [g.domain, g.inherited]), [['studies/course-a', false], ['studies', true]]);
   const [own, parent] = view.groups;
-  assert.deepEqual(own.tasks.map((t) => t.id), ['late', 'own']);
+  // The next 7 days, not just this week: Monday's task shows on Friday; one in two weeks does not.
+  assert.deepEqual(own.tasks.map((t) => t.id), ['late', 'own', 'nextWeek']);
   assert.deepEqual(own.ongoing.map((t) => t.id), ['ongoing']);
   assert.equal(own.label, 'Studies › Course A');
   assert.deepEqual(parent.tasks.map((t) => t.id), ['parent']);

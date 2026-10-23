@@ -129,7 +129,7 @@ Studies [studies] · parent, dated only
   · [g_…] Study sessions — 2/5 · week · habit · studies
 ```
 
-It shows the focus tasks, then by domain: tasks that are late, due today or this week (tasks without a date only
+It shows the focus tasks, then by domain: tasks that are late, due today or in the next 7 days (tasks without a date only
 appear through focus or `ongoing`), goals of the day and the week, and deadlines within 7 days. Its `git pull`
 gives up after `--timeout` seconds (3 by default) and the view uses the local copy, with a one-line warning.
 

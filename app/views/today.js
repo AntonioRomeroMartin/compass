@@ -35,7 +35,7 @@ export function renderTodayView() {
   // Open tasks without a date, folded at the end, by area.
   const shown = new Set(t.groups.flatMap((g) => [...g.tasks, ...g.ongoing].map((x) => x.id)));
   const undated = tasksDoc.tasks.filter((x) => x.status === 'open' && !x.due && !shown.has(x.id));
-  if (!t.groups.length) view.append(h('p', { class: 'empty' }, 'Nothing due today or this week. Add a task with “+”.'));
+  if (!t.groups.length) view.append(h('p', { class: 'empty' }, 'Nothing due in the next 7 days. Add a task with “+”.'));
   if (undated.length) {
     const doms = domainsStore.current();
     /** @type {Map<string, Task[]>} */

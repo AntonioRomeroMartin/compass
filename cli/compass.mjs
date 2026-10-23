@@ -39,7 +39,7 @@ const HELP = `compass — goals, tasks and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
-                                        focus, then by domain: tasks late/today/this week, goals
+                                        focus, then by domain: tasks late/today/next 7 days, goals
                                         of the day and week, deadlines within 7 days, ongoing work
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all]
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE] [--goal G]
@@ -317,7 +317,7 @@ function today(ctx, flags) {
     for (const t of view.focus) console.log(`  ${taskLine(t, ctx)}`);
     if (view.focusElsewhere) console.log(`  (+${view.focusElsewhere} in other domains)`);
   }
-  if (!view.groups.length) console.log('Nothing due this week.');
+  if (!view.groups.length) console.log('Nothing due in the next 7 days.');
   for (const g of view.groups) {
     const id = g.domain && g.label !== g.domain ? ` [${g.domain}]` : '';
     console.log(`${g.label}${id}${g.inherited ? ' · parent, dated only' : ''}`);
