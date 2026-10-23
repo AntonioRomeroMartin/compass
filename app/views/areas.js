@@ -93,7 +93,7 @@ export function renderArea(view, id) {
   for (const m of modulesOf(id)) view.append(...m.areaSections(scope));
 }
 
-/** Sidebar (wide screens): the areas tree under "Areas", closed by default; each area folds its sub-areas. */
+/** Sidebar (wide screens): the areas tree under "Areas", closed by default; an area's name folds its sub-areas. */
 export function renderNavAreas() {
   const box = $('nav-areas');
   const doms = domainsStore.current();
@@ -107,23 +107,17 @@ export function renderNavAreas() {
       const kids = domainsLib.children(doms, d.id).length > 0;
       const open = state.navExpanded.includes(d.id);
       const here = state.tab === 'areas' && (state.subArea ? state.subArea === d.id : state.area === d.id);
-      const name = h('button', { class: 'nav-area-name', onclick: () => openArea(d.id) }, d.name);
+      // The name opens the area and, if it has sub-areas, unfolds or folds them.
+      const name = h('button', {
+        class: 'nav-area-name',
+        'aria-expanded': kids ? String(open) : null,
+        onclick: () => {
+          if (kids) state.navExpanded = open ? state.navExpanded.filter((x) => x !== d.id) : [...state.navExpanded, d.id];
+          openArea(d.id);
+        },
+      }, d.name);
       if (here) name.setAttribute('aria-current', 'page');
-      items.push(h(
-        'div',
-        { class: 'nav-area', style: `--depth: ${depth}` },
-        kids
-          ? h('button', {
-            class: 'nav-fold', 'aria-expanded': String(open), 'aria-label': `${open ? 'Fold' : 'Unfold'} ${d.name}`,
-            onclick: () => {
-              state.navExpanded = open ? state.navExpanded.filter((x) => x !== d.id) : [...state.navExpanded, d.id];
-              persist();
-              renderNavAreas();
-            },
-          }, open ? '▾' : '▸')
-          : h('span', { class: 'nav-fold' }),
-        name,
-      ));
+      items.push(h('div', { class: 'nav-area', style: `--depth: ${depth}` }, name));
       if (kids && open) walk(d.id, depth + 1);
     }
   };

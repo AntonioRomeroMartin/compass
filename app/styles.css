@@ -258,8 +258,7 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 .nav-areas { display: none; }
 @media (min-width: 900px) {
   .nav-areas:not([hidden]) { display: grid; gap: 1px; margin: 2px 0 6px; }
-  .nav-area { display: flex; align-items: center; padding-left: calc(22px + var(--depth) * 14px); }
-  .nav-fold { width: 22px; flex: none; background: none; border: 0; padding: 4px 0; color: var(--muted); font-size: .75rem; text-align: center; }
+  .nav-area { display: flex; align-items: center; padding-left: calc(36px + var(--depth) * 14px); }
   .nav-area-name { flex: 1; min-width: 0; background: none; border: 0; text-align: left; color: var(--muted); font-size: .9rem; padding: 6px 8px; border-radius: 8px; }
   .nav-area-name:hover { color: var(--text); }
   .nav-area-name[aria-current="page"] { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
