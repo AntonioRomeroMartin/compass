@@ -29,10 +29,14 @@ export const state = {
   /** area whose page is open in Areas ('' = the list) and the sub-area chosen in it */
   area: '',
   subArea: '',
+  /** sidebar: the areas tree is open, and the areas whose sub-areas are unfolded */
+  navOpen: false,
+  /** @type {string[]} */
+  navExpanded: [],
 };
 
 export function persist() {
-  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen, area: state.area, subArea: state.subArea });
+  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen, area: state.area, subArea: state.subArea, navOpen: state.navOpen, navExpanded: state.navExpanded });
 }
 
 const cfg = () => state.cfg;

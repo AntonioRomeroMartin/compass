@@ -254,14 +254,15 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 .sub-filter { margin-bottom: 4px; }
 .empty.small { padding: 16px 0; }
 
-/* sidebar: areas indented under "Areas" */
+/* sidebar: areas tree under "Areas", a small indent per level */
 .nav-areas { display: none; }
 @media (min-width: 900px) {
   .nav-areas:not([hidden]) { display: grid; gap: 1px; margin: 2px 0 6px; }
-  .nav-area { background: none; border: 0; text-align: left; color: var(--muted); font-size: .9rem; padding: 6px 12px 6px 46px; border-radius: 8px; }
-  .nav-area.depth-1 { padding-left: 62px; font-size: .84rem; }
-  .nav-area:hover { color: var(--text); }
-  .nav-area[aria-current="page"] { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  .nav-area { display: flex; align-items: center; padding-left: calc(22px + var(--depth) * 14px); }
+  .nav-fold { width: 22px; flex: none; background: none; border: 0; padding: 4px 0; color: var(--muted); font-size: .75rem; text-align: center; }
+  .nav-area-name { flex: 1; min-width: 0; background: none; border: 0; text-align: left; color: var(--muted); font-size: .9rem; padding: 6px 8px; border-radius: 8px; }
+  .nav-area-name:hover { color: var(--text); }
+  .nav-area-name[aria-current="page"] { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
 }
 
 /* home */

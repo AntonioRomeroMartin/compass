@@ -48,7 +48,11 @@ function renderTabs() {
 
 /** @param {Tab} tab */
 function go(tab) {
-  if (tab === 'areas' && state.tab === 'areas') state.area = '';
+  if (tab === 'areas') {
+    // "Areas" opens the list of areas and opens or closes their tree in the sidebar.
+    state.navOpen = !state.navOpen;
+    state.area = '';
+  }
   state.tab = tab;
   persist();
   render();
@@ -135,6 +139,8 @@ function init() {
     state.undatedOpen = ui.undatedOpen === true;
     state.area = typeof ui.area === 'string' ? ui.area : '';
     state.subArea = typeof ui.subArea === 'string' ? ui.subArea : '';
+    state.navOpen = ui.navOpen === true;
+    state.navExpanded = Array.isArray(ui.navExpanded) ? ui.navExpanded.filter((x) => typeof x === 'string') : [];
   }
 
   for (const btn of document.querySelectorAll('[data-tab]')) {
@@ -203,8 +209,6 @@ function init() {
   // Not on a local preview: there every reload must show the files as they are now.
   if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
-
-init();
 
 setRender(renderAll);
 init();
