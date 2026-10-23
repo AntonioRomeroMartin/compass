@@ -233,3 +233,8 @@ details.undated > summary::-webkit-details-marker { display: none; }
 details.undated > summary h2::before { content: "▸"; color: var(--muted); font-size: .8em; }
 details.undated[open] > summary h2::before { content: "▾"; }
 .undated-area h3 { font-size: .85rem; color: var(--muted); font-weight: 600; margin: 12px 0 6px; }
+button.area { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.area-bar { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 10px; }
+.link.back { text-decoration: none; font-size: .95rem; }
+.sub-filter { margin-bottom: 4px; }
+.empty.small { padding: 16px 0; }

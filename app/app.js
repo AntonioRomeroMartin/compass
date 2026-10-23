@@ -1,5 +1,5 @@
 // @ts-check
-import { HORIZONS, periodKey, periodKeys, daysUntil, civilDate, deviceTimeZone, isValidTimeZone } from '../lib/period.js';
+import { HORIZONS, periodKey, periodKeys, daysUntil, civilDate, deviceTimeZone, isValidTimeZone, endOfWeek, addDays } from '../lib/period.js';
 import * as goalsLib from '../lib/goals.js';
 import * as tasksLib from '../lib/tasks.js';
 import * as domainsLib from '../lib/domains.js';
@@ -58,6 +58,9 @@ const state = {
   scope: 'active',
   /** the "No date" block of Today is unfolded */
   undatedOpen: false,
+  /** area whose page is open in Areas ('' = the list) and the sub-area chosen in it */
+  area: '',
+  subArea: '',
 };
 
 // ---------------------------------------------------------------- local storage
@@ -82,7 +85,7 @@ function lsSet(key, value) {
 }
 
 function persist() {
-  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen });
+  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen, area: state.area, subArea: state.subArea });
 }
 
 // ---------------------------------------------------------------- data files
@@ -173,6 +176,7 @@ function renderTabs() {
 
 /** @param {Tab} tab */
 function go(tab) {
+  if (tab === 'areas' && state.tab === 'areas') state.area = '';
   state.tab = tab;
   persist();
   render();
@@ -531,6 +535,9 @@ function renderAreas() {
   view.replaceChildren();
   if (!state.cfg) return;
   const doms = domainsStore.current();
+  if (state.area && !domainsLib.find(doms, state.area)) state.area = '';
+  if (state.area) return renderArea(view, state.area);
+  $('page-title').textContent = 'Areas';
   const open = tasksStore.current().tasks.filter((t) => t.status === 'open');
   const now = new Date();
   const live = current().goals.filter((g) => !g.archived && !isExpired(g, now, tz()));
@@ -540,7 +547,7 @@ function renderAreas() {
   }
   /** @param {string} id */
   const counts = (id) => {
-    const ids = new Set([id, ...domainsLib.descendants(doms, id)]);
+    const ids = areaIds(id);
     return {
       tasks: open.filter((t) => ids.has(domainsLib.canonical(doms, t.domain))).length,
       goals: live.filter((g) => ids.has(domainsLib.canonical(doms, g.category))).length,
@@ -556,198 +563,12 @@ function renderAreas() {
         const kids = domainsLib.children(doms, d.id);
         return h(
           'li',
-          { class: 'area' },
-          h('div', { class: 'area-head' }, h('span', { class: 'area-name' }, d.name), h('span', { class: 'count' }, `${c.tasks} tasks · ${c.goals} goals`)),
-          kids.length ? h('div', { class: 'chips' }, ...kids.map((k) => h('span', { class: 'chip muted' }, k.name))) : null,
-        );
-      }),
-    ),
-  );
-}
-
-function renderToolbar() {
-  const doc = current();
-  for (const btn of document.querySelectorAll('[data-view]')) {
-    btn.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (btn).dataset.view === state.view));
-  }
-  const select = /** @type {HTMLSelectElement} */ ($('filter'));
-  select.replaceChildren(
-    h('option', { value: '' }, 'All categories'),
-    ...doc.categories.map((c) => h('option', { value: c }, c)),
-  );
-  if (state.filter && !doc.categories.includes(state.filter)) state.filter = '';
-  select.value = state.filter;
-  /** @type {HTMLSelectElement} */ ($('scope')).value = state.scope;
-}
-
-function renderList() {
-  const main = $('list');
-  main.replaceChildren();
-  const doc = current();
-  const now = new Date();
-  const zone = tz();
-  const inScope = (/** @type {Goal} */ g) =>
-    state.scope === 'archived' ? !!g.archived
-      : state.scope === 'past' ? !g.archived && isExpired(g, now, zone)
-      : !g.archived && !isExpired(g, now, zone);
-  const goals = doc.goals.filter((g) => inScope(g) && (!state.filter || g.category === state.filter));
-
-  if (!goalsStore.state.loaded && !goalsStore.state.fetchedAt) {
-    main.append(h('p', { class: 'empty' }, state.cfg ? 'Loading goals…' : 'No data yet.'));
-    return;
-  }
-  if (!goals.length) {
-    const msg = state.scope === 'archived'
-      ? 'No archived goals.'
-      : state.scope === 'past'
-        ? 'No past goals yet. One-off goals move here when their period or deadline ends.'
-        : doc.goals.length ? 'No goals here yet.' : 'You have no goals yet. Create your first one with “+ New”.';
-    main.append(h('p', { class: 'empty' }, msg));
-    return;
-  }
-
-  /** @type {[string, string, Goal[]][]} */
-  const groups = [];
-  if (state.scope === 'past') {
-    const end = (/** @type {Goal} */ g) => (g.horizon === 'deadline' ? g.deadline ?? '' : g.createdAt);
-    goals.sort((a, b) => end(b).localeCompare(end(a)));
-    const done = goals.filter((g) => isDone(g, goalKey(g, now, zone))).length;
-    groups.push(['Past', `${done} of ${goals.length} completed (${Math.round((done / goals.length) * 100)}%)`, goals]);
-  } else if (state.view === 'horizon') {
-    for (const hz of HORIZONS) {
-      const list = goals.filter((g) => g.horizon === hz);
-      if (!list.length) continue;
-      const sub = hz === 'deadline' ? '' : periodKey(hz, now, zone);
-      if (hz === 'deadline') list.sort((a, b) => (a.deadline ?? '9999').localeCompare(b.deadline ?? '9999'));
-      groups.push([HORIZON_LABEL[hz], sub, list]);
-    }
-  } else {
-    for (const cat of doc.categories) {
-      const list = goals.filter((g) => g.category === cat);
-      if (!list.length) continue;
-      list.sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon));
-      groups.push([cat, '', list]);
-    }
-  }
-
-  for (const [title, sub, list] of groups) {
-    main.append(
-      h(
-        'section',
-        { class: 'group' },
-        h('h2', {}, title, sub ? h('span', { class: 'sub' }, sub) : null),
-        h('ul', { class: 'cards' }, ...list.map((g) => h('li', {}, card(g, now)))),
-      ),
-    );
-  }
-}
-
-/** @param {Goal} g @param {Date} now */
-function card(g, now) {
-  const zone = tz();
-  const key = goalKey(g, now, zone);
-  const value = g.progress[key] ?? 0;
-  const expired = isExpired(g, now, zone);
-  const editable = canEdit() && !g.archived && !expired;
-  const target = g.target && g.target > 0 ? g.target : null;
-  const done = isDone(g, key);
-  const when = g.horizon === 'deadline' ? 'Deadline' : g.repeat || expired ? HORIZON_SHORT[g.horizon] : HORIZON_LABEL[g.horizon];
-
-  const chips = h(
-    'div',
-    { class: 'chips' },
-    // Active: the view already groups by horizon or category, so the other one is shown.
-    // Past and archived: single list, both are shown.
-    state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, g.category) : null,
-    state.scope !== 'active' || state.view === 'category' ? h('span', { class: 'chip muted' }, when) : null,
-    g.repeat && state.scope === 'active' ? h('span', { class: 'chip muted' }, '↻ Repeats') : null,
-    expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : key) : null,
-    expired ? h('span', { class: done ? 'chip' : 'chip danger' }, done ? '✓ Completed' : '✗ Missed') : null,
-    g.horizon === 'deadline' && g.deadline && !expired ? deadlineChip(g.deadline, now) : null,
-    g.repo ? h('span', { class: 'chip muted' }, g.repo) : null,
-    g.location ? h('span', { class: 'chip muted' }, `📍 ${g.location}`) : null,
-  );
-
-  /** @type {HTMLElement} */
-  let progress;
-  if (g.archived) {
-    progress = h(
-      'div',
-      { class: 'row' },
-      h('button', { class: 'btn', disabled: !canEdit(), onclick: () => dispatch({ type: 'archive', id: g.id, archived: false }) }, 'Restore'),
-    );
-  } else if (expired) {
-    progress = h('p', { class: 'result' }, target ? `${fmt(value)} / ${fmt(target)}${g.unit ? ` ${g.unit}` : ''}` : done ? 'Done' : 'Not done');
-  } else if (target) {
-    const pct = Math.min(100, (value / target) * 100);
-    const bar = h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': value });
-    const fill = h('span');
-    fill.style.width = `${pct}%`;
-    bar.append(fill);
-    progress = h(
-      'div',
-      { class: 'progress' },
-      bar,
-      h(
-        'div',
-        { class: 'row' },
-        h('button', { class: 'round', 'aria-label': 'Decrease', disabled: !editable || value <= 0, onclick: () => dispatch({ type: 'inc', id: g.id, key, delta: -1 }) }, '−'),
-        h(
-          'button',
-          { class: 'value', disabled: !editable, title: 'Enter exact value', onclick: () => askValue(g, key, value) },
-          `${fmt(value)} / ${fmt(target)}${g.unit ? ` ${g.unit}` : ''}`,
-        ),
-        h('button', { class: 'round', 'aria-label': 'Increase', disabled: !editable, onclick: () => dispatch({ type: 'inc', id: g.id, key, delta: 1 }) }, '+'),
-      ),
-    );
-  } else {
-    progress = h(
-      'div',
-      { class: 'row' },
-      h(
-        'button',
-        {
-          class: done ? 'btn done' : 'btn',
-          'aria-pressed': String(done),
-          disabled: !editable,
-          onclick: () => dispatch({ type: 'set', id: g.id, key, value: done ? 0 : 1 }),
-        },
-        done ? '✓ Done' : 'Mark as done',
-      ),
-    );
-  }
-
-  return h(
-    'article',
-    { class: done && !g.archived && !expired ? 'card is-done' : 'card' },
-    h('button', { class: 'title', disabled: !canEdit(), onclick: () => openGoalForm(g) }, g.title),
-    chips,
-    g.notes ? h('p', { class: 'notes' }, g.notes) : null,
-    g.subgoals?.length ? subgoalList(g, key, editable) : null,
-    progress,
-  );
-}
-
-/** Checkboxes of the sub-goals (in habits they are cleared when the period changes). @param {Goal} g @param {string} key @param {boolean} editable */
-function subgoalList(g, key, editable) {
-  const subs = g.subgoals ?? [];
-  return h(
-    'div',
-    { class: 'subs' },
-    h('p', { class: 'subs-count' }, `Sub-goals · ${subgoalsDone(g, key)} of ${subs.length}`),
-    h(
-      'ul',
-      {},
-      ...subs.map((s) => {
-        const done = s.done.includes(key);
-        return h(
-          'li',
           {},
           h(
-            'label',
-            { class: done ? 'sub done' : 'sub' },
-            h('input', { type: 'checkbox', checked: done, disabled: !editable, onchange: () => dispatch({ type: 'toggleSub', id: g.id, subId: s.id, key, done: !done }) }),
-            h('span', {}, s.title),
+            'button',
+            { class: 'area', onclick: () => openArea(d.id) },
+            h('div', { class: 'area-head' }, h('span', { class: 'area-name' }, d.name), h('span', { class: 'count' }, `${c.tasks} tasks · ${c.goals} goals ›`)),
+            kids.length ? h('div', { class: 'chips' }, ...kids.map((k) => h('span', { class: 'chip muted' }, k.name))) : null,
           ),
         );
       }),
@@ -755,20 +576,81 @@ function subgoalList(g, key, editable) {
   );
 }
 
-/** @param {string} deadline @param {Date} now */
-function deadlineChip(deadline, now) {
-  const d = daysUntil(deadline, now, tz());
-  const text = d > 1 ? `${d} days left` : d === 1 ? 'tomorrow' : d === 0 ? 'today' : `overdue by ${-d} ${d === -1 ? 'day' : 'days'}`;
-  return h('span', { class: d < 0 ? 'chip danger' : d <= 7 ? 'chip warn' : 'chip' }, `${deadline} · ${text}`);
+/** An area and all its sub-areas. @param {string} id */
+function areaIds(id) {
+  return new Set([id, ...domainsLib.descendants(domainsStore.current(), id)]);
 }
 
-/** @param {Goal} g @param {string} key @param {number} value */
-function askValue(g, key, value) {
-  const input = prompt(`Value for “${g.title}” (${key})`, String(value));
-  if (input === null) return;
-  const n = Number(input.replace(',', '.'));
-  if (!Number.isFinite(n) || n < 0) return alert('Enter a number greater than or equal to 0.');
-  dispatch({ type: 'set', id: g.id, key, value: n });
+/** @param {string} id */
+function openArea(id) {
+  state.area = id;
+  state.subArea = '';
+  persist();
+  render();
+  window.scrollTo(0, 0);
+}
+
+/** Page of one area: its open tasks by date, its goals and what was done in the last 7 days. @param {HTMLElement} view @param {string} id */
+function renderArea(view, id) {
+  const doms = domainsStore.current();
+  const area = /** @type {import('../lib/domains.js').Domain} */ (domainsLib.find(doms, id));
+  $('page-title').textContent = area.name;
+  const kids = domainsLib.children(doms, id);
+  const scopeId = state.subArea && kids.some((k) => k.id === state.subArea) ? state.subArea : id;
+  const ids = areaIds(scopeId);
+  const inArea = (/** @type {string} */ text) => ids.has(domainsLib.canonical(doms, text));
+  const today = todayKey();
+  const weekEnd = endOfWeek(today);
+  const all = tasksStore.current().tasks.filter((t) => inArea(t.domain));
+  const open = all.filter((t) => t.status === 'open').sort(tasksLib.byDue);
+  const now = new Date();
+  const goals = current().goals.filter((g) => !g.archived && !isExpired(g, now, tz()) && inArea(g.category));
+  const since = addDays(today, -7);
+  const recent = all
+    .filter((t) => t.status !== 'open' && t.doneAt && periodKey('day', new Date(t.doneAt), tz()) >= since)
+    .sort((a, b) => String(b.doneAt).localeCompare(String(a.doneAt)));
+
+  view.append(
+    h(
+      'div',
+      { class: 'area-bar' },
+      h('button', { class: 'link back', onclick: () => openArea('') }, '‹ Areas'),
+      h('button', { class: 'btn primary', disabled: !canEdit(), onclick: () => openTaskForm(undefined, scopeId) }, '+ Task'),
+    ),
+  );
+  if (kids.length) {
+    const box = h('div', { class: 'chip-pick sub-filter', role: 'radiogroup', 'aria-label': 'Sub-area' });
+    chipPicker(box, [[id, 'All'], ...kids.map((k) => /** @type {[string, string]} */ ([k.id, k.name]))], scopeId, (v) => {
+      state.subArea = v === id ? '' : v;
+      persist();
+      render();
+    });
+    view.append(box);
+  }
+
+  /** @type {[string, Task[]][]} */
+  const buckets = [
+    ['Overdue', open.filter((t) => t.due && t.due < today)],
+    ['Today', open.filter((t) => t.due === today)],
+    ['This week', open.filter((t) => t.due && t.due > today && t.due <= weekEnd)],
+    ['Later', open.filter((t) => t.due && t.due > weekEnd)],
+    ['No date', open.filter((t) => !t.due)],
+  ];
+  const showSub = scopeId === id && kids.length > 0;
+  for (const [title, list] of buckets) {
+    if (!list.length) continue;
+    view.append(h('section', { class: 'group' }, h('h2', {}, title, h('span', { class: 'sub' }, String(list.length))), h('ul', { class: 'rows' }, ...list.map((t) => taskRow(t, showSub && domainsLib.canonical(doms, t.domain) !== id)))));
+  }
+  if (!open.length) view.append(h('p', { class: 'empty small' }, 'No open tasks here.'));
+  if (goals.length) view.append(h('section', { class: 'group' }, h('h2', {}, 'Goals'), h('ul', { class: 'rows' }, ...goals.map(goalRow))));
+  if (recent.length) {
+    view.append(h(
+      'details',
+      { class: 'group undated' },
+      h('summary', {}, h('h2', {}, 'Done in the last 7 days', h('span', { class: 'sub' }, String(recent.length)))),
+      h('ul', { class: 'rows' }, ...recent.map((t) => taskRow(t))),
+    ));
+  }
 }
 
 // ---------------------------------------------------------------- goal form
@@ -1067,6 +949,8 @@ function init() {
     state.scope = ['active', 'past', 'archived'].includes(ui.scope) ? ui.scope : ui.showArchived ? 'archived' : 'active';
     if (TABS.includes(ui.tab)) state.tab = ui.tab;
     state.undatedOpen = ui.undatedOpen === true;
+    state.area = typeof ui.area === 'string' ? ui.area : '';
+    state.subArea = typeof ui.subArea === 'string' ? ui.subArea : '';
   }
 
   for (const btn of document.querySelectorAll('[data-tab]')) {
