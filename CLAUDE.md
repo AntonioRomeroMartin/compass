@@ -1,4 +1,4 @@
-# goals — app de objetivos (PWA)
+# compass — app de objetivos y dashboard personal (PWA)
 
 Repo **público**: solo código. Nunca añadas datos personales, categorías u objetivos
 reales, tokens, rutas locales ni nombres de repos privados (tampoco en tests ni docs).
@@ -11,7 +11,7 @@ Los datos de cada usuario viven en su propio repo privado.
 - Estructura: `lib/` (lógica compartida por app y CLI: `period.js`, `goals.js`, `github.js`), `app/` (PWA; `index.html`
   y `sw.js` en la raíz), `cli/` (`compass.mjs` + `repo.mjs`: git sobre un checkout local, mismas operaciones que la app).
   Los periodos se calculan en la `timeZone` del archivo de datos.
-- Esquema del JSON: ver `lib/goals.js` (tipos `Goal` y `GoalsDoc`). Commits de datos con prefijo `goals:`.
+- Esquema del JSON: ver `lib/goals.js` (tipos `Goal` y `GoalsDoc`). Commits de datos con prefijo `goals:`; los de código, con `compass:`.
 - Lógica nueva, en `lib/` y usada por los dos lados; nunca duplicada entre app y CLI.
 - Antes de subir: `node --test tests/`. Si cambia la lista `SHELL` de `sw.js`, sube `VERSION`.
 

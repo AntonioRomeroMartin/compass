@@ -4,8 +4,8 @@
 // Los datos se cachean aparte en localStorage; las llamadas a api.github.com no pasan por aquí.
 // Sube VERSION cuando cambie la lista SHELL (el contenido se actualiza solo: red primero).
 
-const VERSION = 'v4';
-const CACHE = `goals-${VERSION}`;
+const VERSION = 'v5';
+const CACHE = `compass-${VERSION}`;
 const SHELL = [
   './',
   './index.html',
@@ -30,7 +30,7 @@ sw.addEventListener('install', (event) => {
 sw.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('goals-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith('compass-') || k.startsWith('goals-')) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => sw.clients.claim()),
   );
 });

@@ -1,4 +1,4 @@
-# Goals
+# Compass
 
 A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearly and with a deadline) and by category. Anyone can use it with **their own private data**.
 

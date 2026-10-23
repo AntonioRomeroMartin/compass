@@ -1,7 +1,7 @@
 {
-  "name": "Goals",
-  "short_name": "Goals",
-  "description": "Track goals by horizon and category",
+  "name": "Compass",
+  "short_name": "Compass",
+  "description": "Goals, tasks and the rest of your life in one place",
   "lang": "en",
   "start_url": "./",
   "scope": "./",
