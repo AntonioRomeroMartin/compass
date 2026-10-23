@@ -13,8 +13,9 @@ id_ed25519*
 wallet*
 secrets/
 
-# Claude Code: ajustes personales de esta máquina
+# Claude Code: ajustes e instrucciones personales de esta máquina
 .claude/settings.local.json
+CLAUDE.local.md
 
 # Sistema y editores
 .DS_Store
