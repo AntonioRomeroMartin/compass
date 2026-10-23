@@ -1,8 +1,8 @@
 // @ts-check
 /// <reference lib="webworker" />
-// Service worker: guarda la app (no los datos) para que abra sin conexión.
-// Los datos se cachean aparte en localStorage; las llamadas a api.github.com no pasan por aquí.
-// Sube VERSION cuando cambie la lista SHELL (el contenido se actualiza solo: red primero).
+// Service worker: caches the app (not the data) so it opens offline.
+// Data is cached separately in localStorage; calls to api.github.com do not go through here.
+// Bump VERSION when the SHELL list changes (content updates by itself: network first).
 
 const VERSION = 'v5';
 const CACHE = `compass-${VERSION}`;
@@ -35,7 +35,7 @@ sw.addEventListener('activate', (event) => {
   );
 });
 
-// Red primero para la app (así ves siempre la última versión); caché si no hay red.
+// Network first for the app (so you always see the latest version); cache if offline.
 sw.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== sw.location.origin) return;

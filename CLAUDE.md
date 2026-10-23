@@ -1,20 +1,21 @@
-# compass — app de objetivos y dashboard personal (PWA)
+# compass — goals app and personal dashboard (PWA)
 
-Repo **público**: solo código. Nunca añadas datos personales, categorías u objetivos
-reales, tokens, rutas locales ni nombres de repos privados (tampoco en tests ni docs).
-Los datos de cada usuario viven en su propio repo privado.
+**Public** repo: code only. Never add personal data, real categories or goals, tokens, local paths
+or names of private repos (not even in tests, examples or docs). Examples must be generic and must not mirror
+anyone's real categories. Everything in this repo is written in English: code, comments, docs, commits.
+Each user's data lives in their own private repo.
 
-## Reglas
-- Nombres de archivos y carpetas SIEMPRE en inglés.
-- HTML + JS sin build, con `// @ts-check` y tipos JSDoc. Ningún script ni recurso de terceros
-  (la CSP de `index.html` solo permite `'self'` y `https://api.github.com`).
-- Estructura: `lib/` (lógica compartida por app y CLI: `period.js`, `goals.js`, `github.js`), `app/` (PWA; `index.html`
-  y `sw.js` en la raíz), `cli/` (`compass.mjs` + `repo.mjs`: git sobre un checkout local, mismas operaciones que la app).
-  Los periodos se calculan en la `timeZone` del archivo de datos.
-- Esquema del JSON: ver `lib/goals.js` (tipos `Goal` y `GoalsDoc`). Commits de datos con prefijo `goals:`; los de código, con `compass:`.
-- Lógica nueva, en `lib/` y usada por los dos lados; nunca duplicada entre app y CLI.
-- Antes de subir: `node --test tests/`. Si cambia la lista `SHELL` de `sw.js`, sube `VERSION`.
+## Rules
+- File and folder names ALWAYS in English.
+- HTML + JS with no build step, with `// @ts-check` and JSDoc types. No third-party scripts or resources
+  (the CSP in `index.html` only allows `'self'` and `https://api.github.com`).
+- Structure: `lib/` (logic shared by app and CLI: `period.js`, `goals.js`, `github.js`), `app/` (PWA; `index.html`
+  and `sw.js` at the root), `cli/` (`compass.mjs` + `repo.mjs`: git on a local checkout, same operations as the app).
+  Periods are computed in the `timeZone` of the data file.
+- JSON schema: see `lib/goals.js` (types `Goal` and `GoalsDoc`). Data commits use the prefix `goals:`; code commits, `compass:`.
+- New logic goes in `lib/` and is used by both sides; never duplicated between app and CLI.
+- Before pushing: `node --test tests/`. If the `SHELL` list in `sw.js` changes, bump `VERSION`.
 
-## Guardar el progreso
-Sobre la marcha, sin esperar al final (la sesión puede cerrarse sin aviso): tras cada cambio
-importante, actualiza `progress.md` (fecha, qué se hizo, siguiente paso) y haz commit y push a `main`.
+## Saving progress
+As you go, without waiting for the end (the session may close without notice): after each important
+change, update `progress.md` (date, what was done, next step) and commit and push to `main`.

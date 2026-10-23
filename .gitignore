@@ -1,4 +1,4 @@
-# Secretos: nunca en el repo
+# Secrets: never in the repo
 .env
 .env.*
 *.pem
@@ -13,18 +13,18 @@ id_ed25519*
 wallet*
 secrets/
 
-# Claude Code: ajustes e instrucciones personales de esta máquina
+# Claude Code: personal settings and instructions of this machine
 .claude/settings.local.json
 CLAUDE.local.md
 
-# Sistema y editores
+# System and editors
 .DS_Store
 *.swp
 *~
 .vscode/
 .idea/
 
-# Dependencias y builds
+# Dependencies and builds
 node_modules/
 __pycache__/
 .venv/

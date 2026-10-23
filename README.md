@@ -50,7 +50,7 @@ ln -s "$PWD/cli/compass.mjs" ~/.local/bin/compass
 mkdir -p ~/.config/compass
 echo '{ "repo": "/path/to/your/data-repo", "goals": "goals.json" }' > ~/.config/compass/config.json
 compass today                 # goals for today and this week, deadlines within 7 days
-compass goal inc "gym" 1      # a goal by id or part of its title
+compass goal inc "workout" 1      # a goal by id or part of its title
 compass help
 ```
 

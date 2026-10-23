@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
-// CLI de compass: la usa el agente (y quien quiera) para leer y cambiar los datos sin editar
-// el JSON a mano. Comparte la lógica con la app (`lib/`) y escribe con operaciones, igual que ella.
+// compass CLI: for scripts and automation (and anyone else) to read and change the data without editing
+// the JSON by hand. Shares its logic with the app (`lib/`) and writes with operations, like the app.
 
 import { HORIZONS, daysUntil, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
 import { applyOps, commitMessage, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
@@ -62,7 +62,7 @@ function fail(msg) {
 const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, ''));
 
 /**
- * Una línea por objetivo, compacta (es lo que lee el agente).
+ * One compact line per goal (easy for scripts to read).
  * @param {Goal} g @param {Date} now @param {string} tz
  */
 function goalLine(g, now, tz) {

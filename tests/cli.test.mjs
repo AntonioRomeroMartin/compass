@@ -1,4 +1,4 @@
-// Pruebas de la CLI contra repos git temporales (remoto + dos clones): `node --test tests/`
+// CLI tests against temporary git repos (remote + two clones): `node --test tests/`
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -20,7 +20,7 @@ function setup() {
     git(join(dir, name), 'config', 'user.name', 'test');
     git(join(dir, name), 'checkout', '-q', '-B', 'main');
   }
-  const doc = { version: 1, timeZone: 'UTC', categories: ['Gym'], goals: [] };
+  const doc = { version: 1, timeZone: 'UTC', categories: ['Sport'], goals: [] };
   writeFileSync(join(dir, 'a', 'goals.json'), JSON.stringify(doc, null, 2) + '\n');
   git(join(dir, 'a'), 'add', '.');
   git(join(dir, 'a'), 'commit', '-qm', 'init');
@@ -36,22 +36,22 @@ function setup() {
   return { dir, run, read };
 }
 
-test('add, inc y done escriben con commit y push', () => {
+test('add, inc and done write with commit and push', () => {
   const { dir, run } = setup();
-  run('goal', 'add', '--title', 'Strength sessions', '--category', 'Gym', '--horizon', 'week', '--target', '4');
+  run('goal', 'add', '--title', 'Strength sessions', '--category', 'Sport', '--horizon', 'week', '--target', '4');
   run('goal', 'inc', 'strength', '2');
   const out = run('today');
-  assert.match(out, /Strength sessions — 2\/4 · week · Gym/);
+  assert.match(out, /Strength sessions — 2\/4 · week · Sport/);
   git(join(dir, 'b'), 'pull', '-q');
   const doc = JSON.parse(readFileSync(join(dir, 'b', 'goals.json'), 'utf8'));
   assert.equal(Object.values(doc.goals[0].progress)[0], 2);
   assert.match(git(join(dir, 'b'), 'log', '-1', '--format=%s'), /^goals: progress “Strength sessions”/);
 });
 
-test('si otro dispositivo escribe a la vez, se reaplica encima sin perder nada', () => {
+test('if another device writes at the same time, it is re-applied on top without losing anything', () => {
   const { dir, run, read } = setup();
-  run('goal', 'add', '--title', 'Read', '--category', 'Books', '--horizon', 'month', '--target', '3');
-  // Un hook pre-push simula que el otro clon sube un cambio justo antes de nuestro push.
+  run('goal', 'add', '--title', 'Read', '--category', 'Reading', '--horizon', 'month', '--target', '3');
+  // A pre-push hook simulates the other clone pushing a change right before our push.
   const b = join(dir, 'b');
   const hook = join(dir, 'a', '.git', 'hooks', 'pre-push');
   writeFileSync(hook, `#!/bin/sh
@@ -70,16 +70,16 @@ exit 0
   assert.equal(Object.values(doc.goals[0].progress)[0], 1);
 });
 
-test('referencias ambiguas o inexistentes fallan sin escribir', () => {
+test('ambiguous or missing references fail without writing', () => {
   const { run, read } = setup();
-  run('goal', 'add', '--title', 'Run 5k', '--category', 'Gym', '--horizon', 'week');
-  run('goal', 'add', '--title', 'Run 10k', '--category', 'Gym', '--horizon', 'month');
+  run('goal', 'add', '--title', 'Run 5k', '--category', 'Sport', '--horizon', 'week');
+  run('goal', 'add', '--title', 'Run 10k', '--category', 'Sport', '--horizon', 'month');
   assert.throws(() => run('goal', 'inc', 'run'), /several goals/);
   assert.throws(() => run('goal', 'inc', 'swim'), /no goal matches/);
   assert.deepEqual(read('a').goals.map((/** @type {any} */ g) => g.progress), [{}, {}]);
 });
 
-test('period da las claves en la zona del archivo', () => {
+test('period gives the keys in the file\'s zone', () => {
   const { run } = setup();
   const keys = JSON.parse(run('period', '2027-01-01'));
   assert.equal(keys.week, '2026-W53');

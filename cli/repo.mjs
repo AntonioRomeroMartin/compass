@@ -1,9 +1,9 @@
 // @ts-check
-// Acceso de la CLI a los datos: un checkout local de git del repo de datos.
+// CLI access to the data: a local git checkout of the data repo.
 //
-// Mismo modelo que la app: nunca se guarda "el documento entero", sino operaciones que se
-// aplican sobre la última versión. Si el push falla porque el remoto cambió, se deshace el
-// commit local, se vuelve a bajar y se reaplican las operaciones encima.
+// Same model as the app: "the whole document" is never saved, only operations that are
+// applied on top of the latest version. If the push fails because the remote changed, the
+// local commit is undone, the remote is pulled again and the operations are re-applied on top.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,8 +12,8 @@ import { join, resolve } from 'node:path';
 
 /**
  * @typedef {Object} Config
- * @property {string} repo   ruta del checkout local del repo de datos
- * @property {string} goals  ruta de goals.json dentro del repo
+ * @property {string} repo   path of the local checkout of the data repo
+ * @property {string} goals  path of goals.json inside the repo
  */
 
 const CONFIG_PATH = process.env.COMPASS_CONFIG ?? join(homedir(), '.config', 'compass', 'config.json');
@@ -39,9 +39,9 @@ function git(cfg, args, timeout = NET_TIMEOUT) {
 }
 
 /**
- * Trae lo último del remoto. Sin red, avisa y sigue con la copia local.
+ * Pulls the latest from the remote. Without network, it warns and continues with the local copy.
  * @param {Config} cfg
- * @returns {boolean} si se pudo sincronizar
+ * @returns {boolean} whether syncing succeeded
  */
 export function pull(cfg) {
   try {
@@ -62,8 +62,8 @@ export function readJson(cfg, rel) {
 }
 
 /**
- * Aplica `change` sobre la versión actual del archivo, hace commit solo de ese archivo y push.
- * `change` recibe el documento recién leído y devuelve `{ text, message }` (o null si no hay cambio).
+ * Applies `change` to the current version of the file, commits only that file and pushes.
+ * `change` receives the freshly read document and returns `{ text, message }` (or null if nothing changed).
  * @param {Config} cfg
  * @param {string} rel
  * @param {(doc: any) => { text: string, message: string } | null} change
@@ -86,11 +86,11 @@ export function commitChange(cfg, rel, change, opts) {
     } catch (e) {
       const rejected = /rejected|fetch first|non-fast-forward/i.test(String(/** @type {any} */ (e).stderr ?? ''));
       if (!rejected) {
-        // Sin red: el commit queda en local y lo sube el siguiente comando o autosave.
+        // No network: the commit stays local and the next command pushes it.
         console.error(`warning: committed locally but could not push (${firstLine(e)})`);
         return { pushed: false, message: result.message };
       }
-      // El remoto cambió: deshacer el commit (solo este archivo) y reaplicar sobre lo nuevo.
+      // The remote changed: undo the commit (this file only) and re-apply on top of the new version.
       git(cfg, ['reset', '--soft', 'HEAD~1'], 10000);
       git(cfg, ['restore', '--staged', '--worktree', '--', rel], 10000);
     }

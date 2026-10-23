@@ -32,18 +32,18 @@ const HORIZON_SHORT = {
   deadline: 'Deadline',
 };
 
-// ---------------------------------------------------------------- estado
+// ---------------------------------------------------------------- state
 
 const state = {
   /** @type {RepoConfig|null} */
   cfg: null,
-  /** Último documento confirmado en GitHub. @type {GoalsDoc} */
+  /** Last document confirmed on GitHub. @type {GoalsDoc} */
   base: emptyDoc(),
   /** @type {string|null} */
   sha: null,
-  /** Operaciones aún no guardadas. @type {Op[]} */
+  /** Operations not saved yet. @type {Op[]} */
   pending: [],
-  /** @type {string|null} ISO de la última lectura correcta */
+  /** @type {string|null} ISO time of the last successful read */
   fetchedAt: null,
   online: navigator.onLine,
   loaded: false,
@@ -60,7 +60,7 @@ const state = {
 /** @type {ReturnType<typeof setTimeout>|undefined} */
 let saveTimer;
 
-// ---------------------------------------------------------------- almacenamiento local
+// ---------------------------------------------------------------- local storage
 
 /** @param {string} key */
 function lsGet(key) {
@@ -77,7 +77,7 @@ function lsSet(key, value) {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // almacenamiento no disponible: la app sigue funcionando en memoria
+    // storage unavailable: the app keeps working in memory
   }
 }
 
@@ -90,17 +90,17 @@ function cacheBase() {
   lsSet(LS.cache, { doc: state.base, sha: state.sha, fetchedAt: state.fetchedAt });
 }
 
-// ---------------------------------------------------------------- sincronización
+// ---------------------------------------------------------------- sync
 
 const current = () => applyOps(state.base, state.pending);
-/** Zona horaria de los periodos: la del archivo; si no tiene, la del dispositivo. */
+/** Time zone of the periods: the file's; if it has none, the device's. */
 const tz = () => {
   const zone = current().timeZone;
   return isValidTimeZone(zone) ? zone : deviceTimeZone();
 };
 const canEdit = () => state.online && state.loaded && !!state.cfg;
 
-/** fetch() falla con TypeError cuando no hay red. @param {unknown} err */
+/** fetch() fails with TypeError when there is no network. @param {unknown} err */
 function isNetworkError(err) {
   return err instanceof TypeError;
 }
@@ -151,7 +151,7 @@ async function flush() {
       } catch (err) {
         const conflict = err instanceof GitHubError && (err.status === 409 || err.status === 422);
         if (!conflict || attempt >= 3) throw err;
-        // Alguien (p. ej. el agente) cambió el archivo: releer y reaplicar encima.
+        // Someone (e.g. a script) changed the file: re-read and re-apply on top.
         const { text, sha } = await readFile(state.cfg);
         state.base = normalize(JSON.parse(text));
         state.sha = sha;
@@ -349,8 +349,8 @@ function card(g, now) {
   const chips = h(
     'div',
     { class: 'chips' },
-    // Activos: la vista ya agrupa por plazo o por categoría, así que se muestra lo otro.
-    // Pasados y archivados: lista única, se muestran los dos.
+    // Active: the view already groups by horizon or category, so the other one is shown.
+    // Past and archived: single list, both are shown.
     state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, g.category) : null,
     state.scope !== 'active' || state.view === 'category' ? h('span', { class: 'chip muted' }, when) : null,
     g.repeat && state.scope === 'active' ? h('span', { class: 'chip muted' }, '↻ Repeats') : null,
@@ -421,7 +421,7 @@ function card(g, now) {
   );
 }
 
-/** Casillas de los sub-objetivos (en hábitos se desmarcan al cambiar de periodo). @param {Goal} g @param {string} key @param {boolean} editable */
+/** Checkboxes of the sub-goals (in habits they are cleared when the period changes). @param {Goal} g @param {string} key @param {boolean} editable */
 function subgoalList(g, key, editable) {
   const subs = g.subgoals ?? [];
   return h(
@@ -464,7 +464,7 @@ function askValue(g, key, value) {
   dispatch({ type: 'set', id: g.id, key, value: n });
 }
 
-// ---------------------------------------------------------------- formulario de objetivo
+// ---------------------------------------------------------------- goal form
 
 const NEW_CATEGORY = '__new__';
 
@@ -525,7 +525,7 @@ function openGoalForm(goal) {
     const target = targetRaw === '' ? null : Number(targetRaw);
     const deadline = horizon === 'deadline' ? String(f.deadline.value) || null : null;
     const repeat = horizon !== 'deadline' && !!f.repeat.checked;
-    // De una vez: siempre el periodo actual (se conserva al editar si no cambia el plazo).
+    // One-off: always the current period (kept when editing if the horizon does not change).
     const keepPeriod = goal && !goal.repeat && goal.horizon === horizon && goal.period;
     const period = repeat || horizon === 'deadline' ? null : keepPeriod || periodKey(horizon, new Date(), tz());
     if (!title) return f.title.focus();
@@ -545,7 +545,7 @@ function openGoalForm(goal) {
       location: String(f.location.value).trim() || null,
       notes: String(f.notes.value).trim() || null,
     };
-    // Sub-objetivos: los vacíos se quitan; al editar, operaciones sueltas para no pisar casillas marcadas en otro sitio.
+    // Sub-goals: empty ones are dropped; when editing, individual operations so checkboxes ticked elsewhere are not overwritten.
     const rows = Array.from(subList.querySelectorAll('li'), (li) => ({
       id: li.dataset.id ?? '',
       title: /** @type {HTMLInputElement} */ (li.querySelector('input')).value.trim(),
@@ -575,12 +575,12 @@ function openGoalForm(goal) {
   if (!goal) f.title.focus();
 }
 
-/** Fila editable de un sub-objetivo en el formulario. @param {string} id @param {string} title */
+/** Editable row of a sub-goal in the form. @param {string} id @param {string} title */
 function subgoalRow(id, title) {
   const li = h('li', {});
   if (id) li.dataset.id = id;
   const input = h('input', { value: title, maxlength: 120, autocomplete: 'off', placeholder: 'Step towards the goal', 'aria-label': 'Sub-goal' });
-  // Enter añade otra fila en vez de enviar el formulario.
+  // Enter adds another row instead of submitting the form.
   input.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' || ev.isComposing) return;
     ev.preventDefault();
@@ -603,7 +603,7 @@ function syncFormVisibility(form) {
   f.deadline.required = f.horizon.value === 'deadline';
 }
 
-// ---------------------------------------------------------------- ajustes
+// ---------------------------------------------------------------- settings
 
 function openSettings() {
   const dialog = /** @type {HTMLDialogElement} */ ($('settings-dialog'));
@@ -680,7 +680,7 @@ function openSettings() {
   dialog.showModal();
 }
 
-// ---------------------------------------------------------------- categorías y zona horaria
+// ---------------------------------------------------------------- categories and time zone
 
 function openManage() {
   if (!canEdit()) return;
@@ -749,7 +749,7 @@ function renderManage() {
     : `The file has no time zone; using this device's (${deviceTimeZone()}).`;
 }
 
-// ---------------------------------------------------------------- arranque
+// ---------------------------------------------------------------- startup
 
 function init() {
   state.cfg = lsGet(LS.cfg);
@@ -803,7 +803,7 @@ function init() {
       refresh();
     }
   });
-  // Cambio de día/semana (en la zona del archivo) aunque la app siga abierta.
+  // Day/week change (in the file's time zone) even if the app stays open.
   let lastKeys = JSON.stringify(periodKeys(new Date(), tz()));
   setInterval(() => {
     const keys = JSON.stringify(periodKeys(new Date(), tz()));
