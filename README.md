@@ -4,11 +4,12 @@ A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearl
 
 ## How to use it
 
-1. Create a **private** GitHub repo for your data (or use one you already have).
+1. Create a **private** GitHub repo for your data, ideally named `compass-data` (the app suggests that name).
 2. Create a *fine-grained* token in GitHub → Settings → Developer settings → Fine-grained tokens:
    - *Repository access*: **Only select repositories** → that repo.
    - *Permissions* → *Contents*: **Read and write**. Nothing else.
-3. Open the app, tap ⚙ and enter the token, your username, the repo, the goals file (default `goals.json`; tasks and areas go next to it) and the branch. If the file doesn't exist, the app creates an empty one.
+3. Open the app, tap ⚙ and paste the token. On GitHub Pages your username is taken from the site's address; the repo
+   (`compass-data`), the goals file (`goals.json`; tasks and areas go next to it) and the branch (`main`) are filled in. If the file doesn't exist, the app creates an empty one.
 4. Create your categories (“Categories” button) and your goals. On a phone you can install it as an app.
 
 ## Privacy

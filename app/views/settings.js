@@ -8,14 +8,24 @@ import { deviceTimeZone } from '../../lib/period.js';
 
 /** @typedef {import('../../lib/github.js').RepoConfig} RepoConfig */
 
+/** Data repo name suggested on a new device; it is the convention in the README. */
+const DEFAULT_REPO = 'compass-data';
+
+/** The owner of a GitHub Pages site (`<owner>.github.io`), or '' elsewhere (e.g. a local preview). */
+function pagesOwner() {
+  const m = /^([a-z0-9-]+)\.github\.io$/i.exec(location.hostname);
+  return m ? m[1] : '';
+}
+
 export function openSettings() {
   const dialog = /** @type {HTMLDialogElement} */ ($('settings-dialog'));
   const form = /** @type {HTMLFormElement} */ ($('settings-form'));
   const f = /** @type {any} */ (form.elements);
   const cfg = state.cfg;
   f.token.value = cfg?.token ?? '';
-  f.owner.value = cfg?.owner ?? '';
-  f.repo.value = cfg?.repo ?? '';
+  // A new device starts with the usual values: the site's owner, the data repo by convention, its root.
+  f.owner.value = cfg?.owner ?? pagesOwner();
+  f.repo.value = cfg?.repo ?? DEFAULT_REPO;
   f.path.value = cfg?.path ?? 'goals.json';
   f.branch.value = cfg?.branch ?? 'main';
   const msg = $('settings-msg');
