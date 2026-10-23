@@ -1,17 +1,29 @@
 // @ts-check
 import { HORIZONS, periodKey, periodKeys, daysUntil, civilDate, deviceTimeZone, isValidTimeZone } from '../lib/period.js';
-import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import * as goalsLib from '../lib/goals.js';
+import * as tasksLib from '../lib/tasks.js';
+import * as domainsLib from '../lib/domains.js';
+import { buildToday } from '../lib/today.js';
 import { GitHubError, readFile, writeFile } from '../lib/github.js';
+import { createStore } from './store.js';
+
+const { categoryUsage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } = goalsLib;
 
 /** @typedef {import('../lib/goals.js').Goal} Goal */
 /** @typedef {import('../lib/goals.js').GoalsDoc} GoalsDoc */
 /** @typedef {import('../lib/goals.js').Op} Op */
 /** @typedef {import('../lib/goals.js').Subgoal} Subgoal */
+/** @typedef {import('../lib/tasks.js').Task} Task */
 /** @typedef {import('../lib/period.js').Horizon} Horizon */
 /** @typedef {import('../lib/github.js').RepoConfig} RepoConfig */
+/** @typedef {'today'|'areas'|'goals'|'more'} Tab */
 
-const SAVE_DELAY_MS = 2000;
-const LS = { cfg: 'goals.cfg', cache: 'goals.cache', pending: 'goals.pending', ui: 'goals.ui' };
+// localStorage keys keep the "goals." prefix of the first version, so existing devices keep their settings.
+const LS = { cfg: 'goals.cfg', ui: 'goals.ui' };
+/** @type {Tab[]} */
+const TABS = ['today', 'areas', 'goals', 'more'];
+/** @type {Record<Tab, string>} */
+const TAB_TITLE = { today: 'Today', areas: 'Areas', goals: 'Goals', more: 'More' };
 
 /** @type {Record<Horizon, string>} */
 const HORIZON_LABEL = {
@@ -37,28 +49,16 @@ const HORIZON_SHORT = {
 const state = {
   /** @type {RepoConfig|null} */
   cfg: null,
-  /** Last document confirmed on GitHub. @type {GoalsDoc} */
-  base: emptyDoc(),
-  /** @type {string|null} */
-  sha: null,
-  /** Operations not saved yet. @type {Op[]} */
-  pending: [],
-  /** @type {string|null} ISO time of the last successful read */
-  fetchedAt: null,
-  online: navigator.onLine,
-  loaded: false,
-  saving: false,
-  /** @type {string|null} */
-  error: null,
+  /** @type {Tab} */
+  tab: 'today',
   /** @type {'horizon'|'category'} */
   view: 'horizon',
   filter: '',
   /** @type {'active'|'past'|'archived'} */
   scope: 'active',
+  /** the "No date" block of Today is unfolded */
+  undatedOpen: false,
 };
-
-/** @type {ReturnType<typeof setTimeout>|undefined} */
-let saveTimer;
 
 // ---------------------------------------------------------------- local storage
 
@@ -82,98 +82,36 @@ function lsSet(key, value) {
 }
 
 function persist() {
-  lsSet(LS.pending, state.pending.length ? state.pending : null);
-  lsSet(LS.ui, { view: state.view, filter: state.filter, scope: state.scope });
+  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen });
 }
 
-function cacheBase() {
-  lsSet(LS.cache, { doc: state.base, sha: state.sha, fetchedAt: state.fetchedAt });
-}
+// ---------------------------------------------------------------- data files
 
-// ---------------------------------------------------------------- sync
+const cfg = () => state.cfg;
+const goalsStore = createStore({ mod: goalsLib, file: '', ls: 'goals', empty: () => emptyDoc(), cfg, onChange: () => render() });
+const tasksStore = createStore({ mod: tasksLib, file: 'tasks.json', ls: 'compass.tasks', empty: () => tasksLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render() });
+const domainsStore = createStore({ mod: domainsLib, file: 'domains.json', ls: 'compass.domains', empty: () => domainsLib.emptyDoc(), cfg, onChange: () => render() });
+const STORES = [goalsStore, tasksStore, domainsStore];
 
-const current = () => applyOps(state.base, state.pending);
-/** Time zone of the periods: the file's; if it has none, the device's. */
+const current = () => goalsStore.current();
+/** Time zone of the periods: the goals file's; if it has none, the device's. */
 const tz = () => {
   const zone = current().timeZone;
   return isValidTimeZone(zone) ? zone : deviceTimeZone();
 };
-const canEdit = () => state.online && state.loaded && !!state.cfg;
-
-/** fetch() fails with TypeError when there is no network. @param {unknown} err */
-function isNetworkError(err) {
-  return err instanceof TypeError;
-}
+const online = () => navigator.onLine && STORES.every((st) => st.state.online);
+const loaded = () => STORES.every((st) => st.state.loaded);
+const canEdit = () => online() && goalsStore.state.loaded && !!state.cfg;
 
 async function refresh() {
   if (!state.cfg) return;
-  try {
-    const { text, sha } = await readFile(state.cfg);
-    state.base = normalize(JSON.parse(text));
-    state.sha = sha;
-    state.fetchedAt = new Date().toISOString();
-    state.loaded = true;
-    state.online = true;
-    state.error = null;
-    cacheBase();
-    if (state.pending.length) scheduleSave(0);
-  } catch (err) {
-    if (isNetworkError(err)) state.online = false;
-    else state.error = err instanceof SyntaxError ? 'The data file is not valid JSON.' : /** @type {Error} */ (err).message;
-  }
-  render();
-}
-
-/** @param {number} [delay] */
-function scheduleSave(delay = SAVE_DELAY_MS) {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(flush, delay);
-}
-
-async function flush() {
-  if (state.saving || !state.pending.length || !state.cfg || !state.sha) return;
-  state.saving = true;
-  render();
-  const batch = state.pending.slice();
-  try {
-    for (let attempt = 0; ; attempt++) {
-      const next = applyOps(state.base, batch);
-      try {
-        const msg = commitMessage(batch, state.base, next);
-        state.sha = await writeFile(state.cfg, serialize(next), /** @type {string} */ (state.sha), msg);
-        state.base = next;
-        state.pending = state.pending.slice(batch.length);
-        state.fetchedAt = new Date().toISOString();
-        state.error = null;
-        cacheBase();
-        persist();
-        break;
-      } catch (err) {
-        const conflict = err instanceof GitHubError && (err.status === 409 || err.status === 422);
-        if (!conflict || attempt >= 3) throw err;
-        // Someone (e.g. a script) changed the file: re-read and re-apply on top.
-        const { text, sha } = await readFile(state.cfg);
-        state.base = normalize(JSON.parse(text));
-        state.sha = sha;
-      }
-    }
-  } catch (err) {
-    if (isNetworkError(err)) state.online = false;
-    else state.error = `Could not save: ${/** @type {Error} */ (err).message}`;
-  } finally {
-    state.saving = false;
-    render();
-  }
-  if (state.pending.length && state.online && !state.error) scheduleSave();
+  await Promise.all(STORES.map((st) => st.refresh()));
 }
 
 /** @param {...Op} ops */
 function dispatch(...ops) {
   if (!canEdit() || !ops.length) return;
-  state.pending.push(...ops);
-  persist();
-  render();
-  scheduleSave();
+  goalsStore.dispatch(ops);
 }
 
 // ---------------------------------------------------------------- DOM helpers
@@ -207,15 +145,41 @@ const fmt = (n) => (Number.isInteger(n) ? String(n) : n.toLocaleString('en-GB', 
 // ---------------------------------------------------------------- render
 
 function render() {
-  renderToday();
+  renderTabs();
+  renderDate();
   renderStatus();
-  renderToolbar();
-  renderList();
+  if (state.tab === 'today') renderTodayView();
+  if (state.tab === 'areas') renderAreas();
+  if (state.tab === 'goals') {
+    renderToolbar();
+    renderList();
+  }
   /** @type {HTMLButtonElement} */ ($('add')).disabled = !canEdit();
   /** @type {HTMLButtonElement} */ ($('manage')).disabled = !canEdit();
+  /** @type {HTMLButtonElement} */ ($('open-manage')).disabled = !canEdit();
 }
 
-function renderToday() {
+function renderTabs() {
+  for (const btn of document.querySelectorAll('[data-tab]')) {
+    const tab = /** @type {HTMLElement} */ (btn).dataset.tab;
+    if (tab === state.tab) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
+  }
+  for (const sec of document.querySelectorAll('[data-view-of]')) {
+    /** @type {HTMLElement} */ (sec).hidden = /** @type {HTMLElement} */ (sec).dataset.viewOf !== state.tab;
+  }
+  $('page-title').textContent = TAB_TITLE[state.tab];
+}
+
+/** @param {Tab} tab */
+function go(tab) {
+  state.tab = tab;
+  persist();
+  render();
+  window.scrollTo(0, 0);
+}
+
+function renderDate() {
   const t = civilDate(new Date(), tz());
   $('today').textContent = new Date(Date.UTC(t.y, t.m - 1, t.d)).toLocaleDateString('en-GB', {
     weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
@@ -223,16 +187,19 @@ function renderToday() {
 }
 
 function renderStatus() {
+  const saving = STORES.some((st) => st.state.saving);
+  const pending = STORES.some((st) => st.state.pending.length);
+  const error = STORES.map((st) => st.state.error).find(Boolean);
   const status = $('status');
   let text = '';
   if (!state.cfg) text = 'Not set up';
-  else if (!state.online) text = 'Offline';
-  else if (state.saving) text = 'Saving…';
-  else if (state.pending.length) text = 'Pending changes…';
-  else if (state.loaded) text = 'Synced';
+  else if (!online()) text = 'Offline';
+  else if (saving) text = 'Saving…';
+  else if (pending) text = 'Pending changes…';
+  else if (loaded()) text = 'Synced';
   else text = 'Loading…';
   status.textContent = text;
-  status.dataset.state = !state.online ? 'offline' : state.pending.length || state.saving ? 'busy' : 'ok';
+  status.dataset.state = !online() ? 'offline' : pending || saving ? 'busy' : 'ok';
 
   const banner = $('banner');
   banner.replaceChildren();
@@ -241,21 +208,361 @@ function renderStatus() {
   if (!state.cfg) {
     banner.append('Connect to GitHub to get started. ', h('button', { class: 'link', onclick: openSettings }, 'Set up'));
     banner.hidden = false;
-  } else if (!state.online) {
-    const when = state.fetchedAt ? new Date(state.fetchedAt).toLocaleString('en-GB', { timeZone: tz() }) : 'never';
+  } else if (!online()) {
+    const at = goalsStore.state.fetchedAt;
+    const when = at ? new Date(at).toLocaleString('en-GB', { timeZone: tz() }) : 'never';
     banner.append(`Offline: showing saved data (${when}). Editing is disabled.`);
     banner.dataset.kind = 'warn';
     banner.hidden = false;
-  } else if (state.error) {
-    banner.append(state.error, ' ', h('button', { class: 'link', onclick: retry }, 'Retry'));
+  } else if (error) {
+    banner.append(error, ' ', h('button', { class: 'link', onclick: retry }, 'Retry'));
     banner.dataset.kind = 'error';
     banner.hidden = false;
   }
 }
 
 function retry() {
-  state.error = null;
+  for (const st of STORES) st.state.error = null;
   refresh();
+}
+
+// ---------------------------------------------------------------- today
+
+/** Civil date of today in the data's time zone. */
+const todayKey = () => periodKey('day', new Date(), tz());
+
+/** @param {Task} t */
+function toggleTask(t) {
+  if (!canEdit()) return;
+  const now = new Date();
+  if (t.status === 'open') {
+    tasksStore.dispatch([{ type: 'done', id: t.id, at: now.toISOString(), today: todayKey(), nextId: t.repeat ? newId('t_') : null }]);
+  } else {
+    tasksStore.dispatch([{ type: 'reopen', id: t.id }]);
+  }
+  // A task linked to a goal adds (or takes back) 1.
+  const g = t.goal ? current().goals.find((x) => x.id === t.goal) : null;
+  if (g) dispatch({ type: 'inc', id: g.id, key: goalKey(g, now, tz()), delta: t.status === 'open' ? 1 : -1 });
+}
+
+/** @param {Task} t @param {boolean} [showArea] */
+function taskRow(t, showArea = false) {
+  const doms = domainsStore.current();
+  const d = t.due ? daysUntil(t.due, new Date(), tz()) : null;
+  const when = d === null ? null : d < 0 ? `${-d}d late` : d === 0 ? 'today' : d === 1 ? 'tomorrow' : t.due;
+  const done = t.status !== 'open';
+  return h(
+    'li',
+    { class: done ? 'task done' : 'task' },
+    h('input', { type: 'checkbox', checked: done, disabled: !canEdit(), 'aria-label': `Done: ${t.title}`, onchange: () => toggleTask(t) }),
+    h('button', { class: 'task-title', disabled: !canEdit(), onclick: () => openTaskForm(t) }, t.title),
+    h(
+      'span',
+      { class: 'task-meta' },
+      t.subtasks.length ? h('span', { class: 'chip muted' }, `${t.subtasks.filter((x) => x.done).length}/${t.subtasks.length}`) : null,
+      showArea ? h('span', { class: 'chip muted' }, domainsLib.label(doms, domainsLib.canonical(doms, t.domain)) || t.domain) : null,
+      when ? h('span', { class: d !== null && d < 0 ? 'chip danger' : d === 0 ? 'chip warn' : 'chip' }, when) : null,
+      t.repeat ? h('span', { class: 'chip muted', title: tasksLib.repeatText(t.repeat) }, '↻') : null,
+    ),
+  );
+}
+
+/** Compact goal row for Today: title, progress and +1. @param {Goal} g */
+function goalRow(g) {
+  const key = goalKey(g, new Date(), tz());
+  const value = g.progress[key] ?? 0;
+  const target = g.target && g.target > 0 ? g.target : null;
+  const done = isDone(g, key);
+  return h(
+    'li',
+    { class: done ? 'task goal done' : 'task goal' },
+    h('span', { class: 'goal-mark', 'aria-hidden': 'true' }, done ? '◆' : '◇'),
+    h('span', { class: 'task-title' }, g.title),
+    h(
+      'span',
+      { class: 'task-meta' },
+      h('span', { class: 'chip muted' }, `${fmt(value)}${target ? ` / ${fmt(target)}` : ''}${g.unit ? ` ${g.unit}` : ''}`),
+      h('button', {
+        class: 'round small', 'aria-label': `Add 1 to ${g.title}`, disabled: !canEdit(),
+        onclick: () => dispatch(target ? { type: 'inc', id: g.id, key, delta: 1 } : { type: 'set', id: g.id, key, value: done ? 0 : 1 }),
+      }, target ? '+' : done ? '✓' : '○'),
+    ),
+  );
+}
+
+function renderTodayView() {
+  const view = $('view-today');
+  view.replaceChildren();
+  if (!state.cfg) return;
+  if (!loaded() && !goalsStore.state.fetchedAt) {
+    view.append(h('p', { class: 'empty' }, 'Loading…'));
+    return;
+  }
+  // No Focus block for now (decided 2026-10-23): focus marks set from the CLI are ignored here,
+  // so those tasks show in their area like any other.
+  const tasksDoc = tasksStore.current();
+  const unfocused = { ...tasksDoc, tasks: tasksDoc.tasks.map((x) => ({ ...x, focus: false })) };
+  const t = buildToday({ goals: current(), tasks: unfocused, domains: domainsStore.current(), now: new Date(), tz: tz() });
+  for (const g of t.groups) {
+    view.append(
+      h(
+        'section',
+        { class: 'group' },
+        h('h2', {}, g.label),
+        h('ul', { class: 'rows' }, ...g.tasks.map((x) => taskRow(x)), ...g.goals.map(goalRow), ...g.ongoing.map((x) => taskRow(x))),
+      ),
+    );
+  }
+  // Open tasks without a date, folded at the end, by area.
+  const shown = new Set(t.groups.flatMap((g) => [...g.tasks, ...g.ongoing].map((x) => x.id)));
+  const undated = tasksDoc.tasks.filter((x) => x.status === 'open' && !x.due && !shown.has(x.id));
+  if (!t.groups.length) view.append(h('p', { class: 'empty' }, 'Nothing due today or this week. Add a task with “+”.'));
+  if (undated.length) {
+    const doms = domainsStore.current();
+    /** @type {Map<string, Task[]>} */
+    const byArea = new Map();
+    for (const x of undated) {
+      const k = domainsLib.canonical(doms, x.domain) || x.domain;
+      byArea.set(k, [...(byArea.get(k) ?? []), x]);
+    }
+    const order = (/** @type {string} */ k) => { const i = doms.domains.findIndex((d) => d.id === k); return i < 0 ? 1e5 : i; };
+    const details = h(
+      'details',
+      { class: 'group undated', open: state.undatedOpen },
+      h('summary', {}, h('h2', {}, 'No date', h('span', { class: 'sub' }, String(undated.length)))),
+      ...[...byArea.entries()].sort((a, b) => order(a[0]) - order(b[0])).map(([k, list]) => h(
+        'div',
+        { class: 'undated-area' },
+        h('h3', {}, domainsLib.label(doms, k) || k),
+        h('ul', { class: 'rows' }, ...list.map((x) => taskRow(x))),
+      )),
+    );
+    details.addEventListener('toggle', () => { state.undatedOpen = /** @type {HTMLDetailsElement} */ (details).open; persist(); });
+    view.append(details);
+  }
+}
+
+// ---------------------------------------------------------------- task form
+
+/** Choices of the "When" chips; "pick" shows the date field. */
+const WHEN = /** @type {const} */ ([['none', 'No date'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['nextweek', 'Next week'], ['pick', 'Pick date…']]);
+
+/** @param {string} today */
+function nextMonday(today) {
+  for (let i = 1; i <= 7; i++) {
+    const d = tasksLib.parseDue(`+${i}`, today);
+    if (d && new Date(`${d}T12:00:00Z`).getUTCDay() === 1) return d;
+  }
+  return today;
+}
+
+/** Chips that work as a single choice. @param {HTMLElement} box @param {[string, string][]} items @param {string} value @param {(v: string) => void} onPick */
+function chipPicker(box, items, value, onPick) {
+  box.replaceChildren(
+    ...items.map(([v, text]) => h('button', {
+      type: 'button', role: 'radio', class: 'chip-opt', 'aria-checked': String(v === value), 'data-v': v,
+      onclick: (/** @type {MouseEvent} */ ev) => {
+        for (const b of box.querySelectorAll('button')) b.setAttribute('aria-checked', String(b === ev.currentTarget));
+        onPick(v);
+      },
+    }, text)),
+  );
+}
+
+/** @param {Task} [task] @param {string} [domain] area chosen in advance (e.g. from an area's page) */
+function openTaskForm(task, domain) {
+  if (!canEdit()) return;
+  const dialog = /** @type {HTMLDialogElement} */ ($('task-dialog'));
+  const form = /** @type {HTMLFormElement} */ ($('task-form'));
+  const f = /** @type {any} */ (form.elements);
+  const doms = domainsStore.current();
+  const today = todayKey();
+  const msg = $('task-msg');
+  msg.textContent = '';
+
+  $('task-dialog-title').textContent = task ? 'Edit task' : 'New task';
+  /** @type {HTMLElement} */ (dialog.querySelector('.kind-switch')).hidden = !!task;
+  $('task-submit').textContent = task ? 'Save' : 'Add';
+  f.title.value = task?.title ?? '';
+
+  // Area: parents followed by their sub-areas.
+  let area = task ? domainsLib.canonical(doms, task.domain) || task.domain : domain ?? '';
+  /** @type {[string, string][]} */
+  const areaItems = [];
+  /** @param {string|undefined} parent @param {number} depth */
+  const walk = (parent, depth) => {
+    for (const d of doms.domains.filter((x) => (x.parent ?? '') === (parent ?? ''))) {
+      areaItems.push([d.id, d.name]);
+      walk(d.id, depth + 1);
+    }
+  };
+  walk(undefined, 0);
+  if (area && !areaItems.some(([id]) => id === area)) areaItems.push([area, area]);
+  chipPicker($('task-areas'), areaItems, area, (v) => { area = v; });
+  for (const b of $('task-areas').querySelectorAll('button')) {
+    const d = domainsLib.find(doms, /** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.v));
+    if (d?.parent) b.classList.add('sub');
+  }
+
+  // When.
+  const due = task?.due ?? null;
+  const preset = !due ? 'none' : due === today ? 'today' : due === tasksLib.parseDue('tomorrow', today) ? 'tomorrow' : 'pick';
+  let when = /** @type {string} */ (preset);
+  f.due.value = due ?? '';
+  f.due.hidden = when !== 'pick';
+  chipPicker($('task-when'), WHEN.map(([v, t]) => [v, t]), when, (v) => {
+    when = v;
+    f.due.hidden = v !== 'pick';
+    if (v === 'pick') { if (!f.due.value) f.due.value = today; f.due.focus(); }
+    syncRepeatHint();
+  });
+
+  // More options.
+  const r = task?.repeat ?? null;
+  const rText = r ? tasksLib.repeatText(r) : '';
+  f.repeat.value = !r ? '' : rText === 'daily' ? 'daily' : rText === 'weekly mon,tue,wed,thu,fri' ? 'weekdays' : 'custom';
+  f.repeatCustom.value = f.repeat.value === 'custom' ? rText : '';
+  f.notes.value = task?.notes ?? '';
+  const now = new Date();
+  const goals = current().goals.filter((g) => !g.archived && !isExpired(g, now, tz()));
+  f.goal.replaceChildren(h('option', { value: '' }, 'None'), ...goals.map((g) => h('option', { value: g.id }, g.title)));
+  f.goal.value = task?.goal && goals.some((g) => g.id === task.goal) ? task.goal : '';
+  f.location.value = task?.location ?? '';
+  const subList = $('subtask-list');
+  subList.replaceChildren(...(task?.subtasks ?? []).map((st) => editRow(st.id, st.title, 'Step', 'add-subtask')));
+  $('add-subtask').onclick = () => {
+    const row = editRow('', '', 'Step', 'add-subtask');
+    subList.append(row);
+    /** @type {HTMLInputElement} */ (row.querySelector('input')).focus();
+  };
+  /** @type {HTMLDetailsElement} */ ($('task-more')).open = false;
+
+  const dueValue = () => (when === 'none' ? null : when === 'today' ? today : when === 'tomorrow' ? tasksLib.parseDue('tomorrow', today)
+    : when === 'nextweek' ? nextMonday(today) : String(f.due.value) || null);
+  /** The rule chosen, or an Error. */
+  const repeatValue = () => {
+    const kind = String(f.repeat.value);
+    const text = kind === 'custom' ? String(f.repeatCustom.value) : kind;
+    try {
+      return tasksLib.parseRepeat(text, dueValue() ?? today);
+    } catch (e) {
+      return /** @type {Error} */ (e);
+    }
+  };
+  function syncRepeatHint() {
+    $('field-repeat-custom').hidden = f.repeat.value !== 'custom';
+    const rule = repeatValue();
+    $('task-repeat-hint').textContent = rule instanceof Error ? rule.message
+      : rule ? `Repeats ${tasksLib.repeatText(rule)}: when you complete it, the next one is created.` : '';
+  }
+  f.repeat.onchange = syncRepeatHint;
+  f.repeatCustom.oninput = syncRepeatHint;
+  f.due.onchange = syncRepeatHint;
+  syncRepeatHint();
+
+  const extra = $('task-extra-actions');
+  extra.replaceChildren();
+  if (task) {
+    if (task.status === 'open') {
+      extra.append(h('button', { type: 'button', class: 'btn', onclick: () => {
+        const stop = !!task.repeat && confirm('Stop repeating it too?\n\nOK: no more copies. Cancel: drop only this one.');
+        tasksStore.dispatch([{ type: 'drop', id: task.id, at: new Date().toISOString(), today, nextId: task.repeat && !stop ? newId('t_') : null }]);
+        dialog.close();
+      } }, 'Drop'));
+    } else {
+      extra.append(h('button', { type: 'button', class: 'btn', onclick: () => { tasksStore.dispatch([{ type: 'reopen', id: task.id }]); dialog.close(); } }, 'Reopen'));
+    }
+    extra.append(h('button', { type: 'button', class: 'link danger', onclick: () => {
+      if (!confirm(`Delete “${task.title}” permanently?\n\nTo keep a record, use “Drop”.`)) return;
+      tasksStore.dispatch([{ type: 'delete', id: task.id }]);
+      dialog.close();
+    } }, 'Delete…'));
+  }
+
+  form.onsubmit = (ev) => {
+    ev.preventDefault();
+    const title = String(f.title.value).trim();
+    if (!title) return f.title.focus();
+    if (!area) { msg.textContent = 'Choose an area.'; return; }
+    if (when === 'pick' && !f.due.value) { msg.textContent = 'Pick a date.'; return; }
+    const rule = repeatValue();
+    if (rule instanceof Error) { /** @type {HTMLDetailsElement} */ ($('task-more')).open = true; msg.textContent = rule.message; return; }
+    const fields = {
+      title,
+      domain: area,
+      due: dueValue(),
+      repeat: rule,
+      notes: String(f.notes.value).trim() || null,
+      goal: String(f.goal.value) || null,
+      location: String(f.location.value).trim() || null,
+    };
+    const rows = Array.from(subList.querySelectorAll('li'), (li) => ({
+      id: li.dataset.id ?? '',
+      title: /** @type {HTMLInputElement} */ (li.querySelector('input')).value.trim(),
+    })).filter((x) => x.title);
+    if (task) {
+      const old = task.subtasks;
+      /** @type {import('../lib/tasks.js').Op[]} */
+      const ops = [
+        { type: 'edit', id: task.id, fields },
+        ...old.filter((x) => !rows.some((r) => r.id === x.id)).map((x) => /** @type {const} */ ({ type: 'removeSub', id: task.id, subId: x.id })),
+        ...rows.flatMap((r) => {
+          const prev = old.find((x) => x.id === r.id);
+          if (!prev) return [/** @type {const} */ ({ type: 'addSub', id: task.id, sub: { id: newId('s_'), title: r.title, done: false } })];
+          return prev.title === r.title ? [] : [/** @type {const} */ ({ type: 'editSub', id: task.id, subId: r.id, title: r.title })];
+        }),
+      ];
+      tasksStore.dispatch(ops);
+    } else {
+      const t = tasksLib.newTask({ ...fields, subtasks: rows.map((r) => ({ id: newId('s_'), title: r.title, done: false })) });
+      tasksStore.dispatch([{ type: 'add', task: t }]);
+    }
+    dialog.close();
+  };
+
+  dialog.showModal();
+  if (!task) f.title.focus();
+}
+
+// ---------------------------------------------------------------- areas
+
+function renderAreas() {
+  const view = $('view-areas');
+  view.replaceChildren();
+  if (!state.cfg) return;
+  const doms = domainsStore.current();
+  const open = tasksStore.current().tasks.filter((t) => t.status === 'open');
+  const now = new Date();
+  const live = current().goals.filter((g) => !g.archived && !isExpired(g, now, tz()));
+  if (!doms.domains.length) {
+    view.append(h('p', { class: 'empty' }, domainsStore.state.loaded ? 'No areas yet.' : 'Loading…'));
+    return;
+  }
+  /** @param {string} id */
+  const counts = (id) => {
+    const ids = new Set([id, ...domainsLib.descendants(doms, id)]);
+    return {
+      tasks: open.filter((t) => ids.has(domainsLib.canonical(doms, t.domain))).length,
+      goals: live.filter((g) => ids.has(domainsLib.canonical(doms, g.category))).length,
+    };
+  };
+  const top = doms.domains.filter((d) => !d.parent);
+  view.append(
+    h(
+      'ul',
+      { class: 'areas' },
+      ...top.map((d) => {
+        const c = counts(d.id);
+        const kids = domainsLib.children(doms, d.id);
+        return h(
+          'li',
+          { class: 'area' },
+          h('div', { class: 'area-head' }, h('span', { class: 'area-name' }, d.name), h('span', { class: 'count' }, `${c.tasks} tasks · ${c.goals} goals`)),
+          kids.length ? h('div', { class: 'chips' }, ...kids.map((k) => h('span', { class: 'chip muted' }, k.name))) : null,
+        );
+      }),
+    ),
+  );
 }
 
 function renderToolbar() {
@@ -285,7 +592,7 @@ function renderList() {
       : !g.archived && !isExpired(g, now, zone);
   const goals = doc.goals.filter((g) => inScope(g) && (!state.filter || g.category === state.filter));
 
-  if (!state.loaded && !state.fetchedAt) {
+  if (!goalsStore.state.loaded && !goalsStore.state.fetchedAt) {
     main.append(h('p', { class: 'empty' }, state.cfg ? 'Loading goals…' : 'No data yet.'));
     return;
   }
@@ -477,6 +784,7 @@ function openGoalForm(goal) {
   const f = /** @type {any} */ (form.elements);
 
   $('goal-dialog-title').textContent = goal ? 'Edit goal' : 'New goal';
+  /** @type {HTMLElement} */ (dialog.querySelector('.kind-switch')).hidden = !!goal;
   f.title.value = goal?.title ?? '';
   f.category.replaceChildren(
     ...doc.categories.map((c) => h('option', { value: c }, c)),
@@ -577,16 +885,23 @@ function openGoalForm(goal) {
 
 /** Editable row of a sub-goal in the form. @param {string} id @param {string} title */
 function subgoalRow(id, title) {
+  return editRow(id, title, 'Step towards the goal', 'add-subgoal');
+}
+
+/**
+ * Editable row of a list of steps (sub-goals, subtasks); Enter adds another row instead of submitting.
+ * @param {string} id @param {string} title @param {string} placeholder @param {string} addId id of the "+ Add" button
+ */
+function editRow(id, title, placeholder, addId) {
   const li = h('li', {});
   if (id) li.dataset.id = id;
-  const input = h('input', { value: title, maxlength: 120, autocomplete: 'off', placeholder: 'Step towards the goal', 'aria-label': 'Sub-goal' });
-  // Enter adds another row instead of submitting the form.
+  const input = h('input', { value: title, maxlength: 120, autocomplete: 'off', placeholder, 'aria-label': placeholder });
   input.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' || ev.isComposing) return;
     ev.preventDefault();
-    /** @type {HTMLButtonElement} */ ($('add-subgoal')).click();
+    /** @type {HTMLButtonElement} */ ($(addId)).click();
   });
-  li.append(input, h('button', { type: 'button', class: 'link danger', 'aria-label': 'Remove sub-goal', onclick: () => li.remove() }, 'Remove'));
+  li.append(input, h('button', { type: 'button', class: 'link danger', 'aria-label': 'Remove', onclick: () => li.remove() }, 'Remove'));
   return li;
 }
 
@@ -655,12 +970,7 @@ function openSettings() {
     const changedTarget = !state.cfg || ['owner', 'repo', 'path', 'branch'].some((k) => /** @type {any} */ (state.cfg)[k] !== /** @type {any} */ (next)[k]);
     state.cfg = next;
     lsSet(LS.cfg, next);
-    if (changedTarget) {
-      state.pending = [];
-      state.fetchedAt = null;
-      state.loaded = false;
-      persist();
-    }
+    if (changedTarget) for (const st of STORES) st.reset();
     dialog.close();
     refresh();
   };
@@ -668,11 +978,8 @@ function openSettings() {
   $('forget-token').onclick = () => {
     if (!confirm('Forget the token on this device? Unsaved changes will be lost.')) return;
     state.cfg = null;
-    state.pending = [];
-    state.loaded = false;
+    for (const st of STORES) st.reset();
     lsSet(LS.cfg, null);
-    lsSet(LS.cache, null);
-    persist();
     dialog.close();
     render();
   };
@@ -753,18 +1060,17 @@ function renderManage() {
 
 function init() {
   state.cfg = lsGet(LS.cfg);
-  const cache = lsGet(LS.cache);
-  if (cache?.doc) {
-    state.base = normalize(cache.doc);
-    state.sha = cache.sha ?? null;
-    state.fetchedAt = cache.fetchedAt ?? null;
-  }
-  state.pending = lsGet(LS.pending) ?? [];
   const ui = lsGet(LS.ui);
   if (ui) {
     state.view = ui.view === 'category' ? 'category' : 'horizon';
     state.filter = typeof ui.filter === 'string' ? ui.filter : '';
     state.scope = ['active', 'past', 'archived'].includes(ui.scope) ? ui.scope : ui.showArchived ? 'archived' : 'active';
+    if (TABS.includes(ui.tab)) state.tab = ui.tab;
+    state.undatedOpen = ui.undatedOpen === true;
+  }
+
+  for (const btn of document.querySelectorAll('[data-tab]')) {
+    btn.addEventListener('click', () => go(/** @type {Tab} */ (/** @type {HTMLElement} */ (btn).dataset.tab)));
   }
 
   for (const btn of document.querySelectorAll('[data-view]')) {
@@ -784,21 +1090,31 @@ function init() {
     persist();
     render();
   });
-  $('add').addEventListener('click', () => openGoalForm());
+  $('add').addEventListener('click', () => openTaskForm());
+  // Task · Goal switch at the top of a new item's sheet.
+  for (const btn of document.querySelectorAll('[data-switch]')) {
+    btn.addEventListener('click', () => {
+      /** @type {HTMLDialogElement} */ (btn.closest('dialog')).close();
+      if (/** @type {HTMLElement} */ (btn).dataset.switch === 'goal') openGoalForm();
+      else openTaskForm();
+    });
+  }
   $('refresh').addEventListener('click', refresh);
   $('settings').addEventListener('click', openSettings);
   $('manage').addEventListener('click', openManage);
+  $('open-manage').addEventListener('click', openManage);
+  $('task-dialog').addEventListener('close', () => render());
   const goalForm = /** @type {HTMLFormElement} */ ($('goal-form'));
   goalForm.addEventListener('change', () => syncFormVisibility(goalForm));
   for (const btn of document.querySelectorAll('[data-close]')) {
     btn.addEventListener('click', () => /** @type {HTMLDialogElement} */ (btn.closest('dialog')).close());
   }
 
-  window.addEventListener('online', () => { state.online = true; refresh(); });
-  window.addEventListener('offline', () => { state.online = false; render(); });
+  window.addEventListener('online', () => { for (const st of STORES) st.state.online = true; refresh(); });
+  window.addEventListener('offline', () => render());
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      if (state.pending.length) flush();
+      for (const st of STORES) if (st.state.pending.length) st.flush();
     } else {
       refresh();
     }
@@ -814,7 +1130,8 @@ function init() {
   if (state.cfg) refresh();
   else openSettings();
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // Not on a local preview: there every reload must show the files as they are now.
+  if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 
 init();

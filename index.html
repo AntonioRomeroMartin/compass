@@ -17,41 +17,128 @@
   <script type="module" src="app/app.js"></script>
 </head>
 <body>
-  <header class="top">
-    <div>
-      <h1>Compass</h1>
-      <p id="today" class="today"></p>
-    </div>
-    <div class="top-actions">
-      <span id="status" class="status" role="status" aria-live="polite"></span>
-      <button id="refresh" class="icon" aria-label="Reload" title="Reload">↻</button>
-      <button id="settings" class="icon" aria-label="Settings" title="Settings">⚙</button>
-    </div>
-  </header>
-
-  <div id="banner" class="banner" hidden></div>
-
-  <nav class="toolbar" aria-label="View">
-    <div class="segmented" role="group" aria-label="Group by">
-      <button data-view="horizon" aria-pressed="true">By horizon</button>
-      <button data-view="category" aria-pressed="false">By category</button>
-    </div>
-    <select id="filter" aria-label="Filter by category"></select>
-    <select id="scope" aria-label="Show">
-      <option value="active">Active</option>
-      <option value="past">Past</option>
-      <option value="archived">Archived</option>
-    </select>
-    <button id="manage" class="link">Categories</button>
+  <nav class="tabs" aria-label="Sections">
+    <span class="brand">Compass</span>
+    <button data-tab="today" aria-current="page"><span class="ico" aria-hidden="true">◎</span><span>Today</span></button>
+    <button data-tab="areas"><span class="ico" aria-hidden="true">▦</span><span>Areas</span></button>
+    <button id="add" class="tab-add" aria-label="New"><span class="ico" aria-hidden="true">+</span><span>New</span></button>
+    <button data-tab="goals"><span class="ico" aria-hidden="true">◇</span><span>Goals</span></button>
+    <button data-tab="more"><span class="ico" aria-hidden="true">⋯</span><span>More</span></button>
   </nav>
 
-  <main id="list"></main>
+  <div class="page">
+    <header class="top">
+      <div>
+        <h1 id="page-title">Today</h1>
+        <p id="today" class="today"></p>
+      </div>
+      <div class="top-actions">
+        <span id="status" class="status" role="status" aria-live="polite"></span>
+        <button id="refresh" class="icon" aria-label="Reload" title="Reload">↻</button>
+      </div>
+    </header>
 
-  <button id="add" class="fab" aria-label="New goal">+ New</button>
+    <div id="banner" class="banner" hidden></div>
 
-  <dialog id="goal-dialog">
+    <section id="view-today" data-view-of="today"></section>
+
+    <section id="view-areas" data-view-of="areas" hidden></section>
+
+    <section id="view-goals" data-view-of="goals" hidden>
+      <div class="toolbar" role="group" aria-label="View">
+        <div class="segmented" role="group" aria-label="Group by">
+          <button data-view="horizon" aria-pressed="true">By horizon</button>
+          <button data-view="category" aria-pressed="false">By category</button>
+        </div>
+        <select id="filter" aria-label="Filter by category"></select>
+        <select id="scope" aria-label="Show">
+          <option value="active">Active</option>
+          <option value="past">Past</option>
+          <option value="archived">Archived</option>
+        </select>
+        <button id="manage" class="link">Categories</button>
+      </div>
+      <main id="list"></main>
+    </section>
+
+    <section id="view-more" data-view-of="more" hidden>
+      <ul class="menu">
+        <li><button id="settings" class="menu-item">GitHub connection<span class="hint">Token, repo and data files</span></button></li>
+        <li><button id="open-manage" class="menu-item">Categories and time zone<span class="hint">Goal categories, periods</span></button></li>
+      </ul>
+    </section>
+  </div>
+
+  <dialog id="task-dialog" class="sheet">
+    <form id="task-form" novalidate>
+      <div class="sheet-head">
+        <h2 id="task-dialog-title">New task</h2>
+        <div class="segmented kind-switch" role="group" aria-label="Kind">
+          <button type="button" aria-pressed="true">Task</button>
+          <button type="button" data-switch="goal" aria-pressed="false">Goal</button>
+        </div>
+      </div>
+      <input name="title" required maxlength="160" autocomplete="off" placeholder="What needs doing?" aria-label="Title" class="big">
+      <fieldset class="pick">
+        <legend>Area</legend>
+        <div id="task-areas" class="chip-pick" role="radiogroup" aria-label="Area"></div>
+      </fieldset>
+      <fieldset class="pick">
+        <legend>When</legend>
+        <div id="task-when" class="chip-pick" role="radiogroup" aria-label="When"></div>
+        <input name="due" type="date" aria-label="Date" hidden>
+      </fieldset>
+      <details id="task-more">
+        <summary>More options</summary>
+        <div class="more-fields">
+          <label>Repeat
+            <select name="repeat">
+              <option value="">Never</option>
+              <option value="daily">Every day</option>
+              <option value="weekdays">Weekdays (Mon–Fri)</option>
+              <option value="weekly">Every week</option>
+              <option value="monthly">Every month</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          <label id="field-repeat-custom" hidden>Custom repeat
+            <input name="repeatCustom" autocomplete="off" spellcheck="false" placeholder="every 3 days · mon,thu · monthly:15">
+          </label>
+          <p id="task-repeat-hint" class="hint"></p>
+          <label>Notes
+            <textarea name="notes" rows="3" maxlength="4000" placeholder="Details, links…"></textarea>
+          </label>
+          <fieldset class="subgoals">
+            <legend>Subtasks</legend>
+            <ul id="subtask-list" class="edit-list"></ul>
+            <button type="button" id="add-subtask" class="link">+ Add subtask</button>
+          </fieldset>
+          <label>Counts towards a goal
+            <select name="goal"></select>
+          </label>
+          <label>Location
+            <input name="location" maxlength="120" autocomplete="off" placeholder="library, gym, online…">
+          </label>
+        </div>
+      </details>
+      <p id="task-msg" class="msg" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <div id="task-extra-actions" class="extra"></div>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="task-submit">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="goal-dialog" class="sheet">
     <form id="goal-form" novalidate>
-      <h2 id="goal-dialog-title">New goal</h2>
+      <div class="sheet-head">
+        <h2 id="goal-dialog-title">New goal</h2>
+        <div class="segmented kind-switch" role="group" aria-label="Kind">
+          <button type="button" data-switch="task" aria-pressed="false">Task</button>
+          <button type="button" aria-pressed="true">Goal</button>
+        </div>
+      </div>
       <label>Title
         <input name="title" required maxlength="120" autocomplete="off">
       </label>
@@ -132,7 +219,8 @@
       <p class="hint">Your goals are stored in a JSON file inside <strong>your own private GitHub repo</strong>.
         Create a <em>fine-grained</em> token with access to that repo only and the
         <em>Contents: Read and write</em> permission. The token is stored only in this browser; this site has
-        no server and only talks to <code>api.github.com</code>. If the file doesn't exist, the app offers to create it.</p>
+        no server and only talks to <code>api.github.com</code>. If the file doesn't exist, the app offers to create it.
+        Tasks and areas live next to it (<code>tasks.json</code>, <code>domains.json</code>).</p>
       <label>GitHub token
         <input name="token" type="password" required autocomplete="off" spellcheck="false" placeholder="github_pat_…">
       </label>
@@ -145,7 +233,7 @@
         </label>
       </div>
       <div class="two">
-        <label>File
+        <label>Goals file
           <input name="path" required autocomplete="off" spellcheck="false">
         </label>
         <label>Branch
