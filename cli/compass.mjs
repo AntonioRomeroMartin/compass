@@ -3,8 +3,9 @@
 // compass CLI: for scripts and agents (and anyone else) to read and change the data without editing
 // the JSON by hand. Shares its logic with the app (`lib/`) and writes with operations, like the app.
 
+import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
 import { applyOps, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
 import * as tasks from '../lib/tasks.js';
@@ -41,7 +42,8 @@ Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
                                         focus, then by domain: tasks late/today/next 7 days, goals
                                         of the day and week, deadlines within 7 days, ongoing work
-  compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all]
+  compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
+                                        --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE] [--goal G]
                    [--ongoing PATH] [--notes T] [--focus]
   compass task done|undo|drop|focus|unfocus|show <task>
@@ -327,6 +329,19 @@ function today(ctx, flags) {
   }
 }
 
+/** Every task in the yearly archives (tasks-YYYY.json next to tasks.json), oldest year first. @param {Ctx} ctx */
+function archivedTasks(ctx) {
+  const dir = join(ctx.cfg.repo, dirname(ctx.cfg.tasks));
+  const base = basename(ctx.cfg.tasks).replace(/\.json$/, '');
+  let names = [];
+  try {
+    names = readdirSync(dir).filter((n) => new RegExp(`^${base}-\\d{4}\\.json$`).test(n)).sort();
+  } catch {
+    // no folder yet
+  }
+  return names.flatMap((n) => tasks.normalize(readJson(ctx.cfg, join(dirname(ctx.cfg.tasks), n))).tasks);
+}
+
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
 function listTasks(ctx, flags) {
   const scope = scopeFrom(ctx, flags);
@@ -334,8 +349,8 @@ function listTasks(ctx, flags) {
   const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
   const due = str(flags.due);
   if (due && !['today', 'week', 'overdue'].includes(due)) fail('--due must be today, week or overdue');
-  const list = ctx.tasks.tasks
-    .filter((t) => (flags.all || t.status === 'open')
+  const list = (flags.archived ? archivedTasks(ctx) : ctx.tasks.tasks)
+    .filter((t) => (flags.all || flags.archived || t.status === 'open')
       && (!own || own.has(domains.canonical(ctx.domains, t.domain)))
       && (!due || (t.status === 'open' && tasks.isDueWithin(t, /** @type {'today'|'week'|'overdue'} */ (due), ctx.today))))
     .sort((a, b) => Number(a.status !== 'open') - Number(b.status !== 'open') || tasks.byDue(a, b));
@@ -351,12 +366,17 @@ function listTasks(ctx, flags) {
 
 /**
  * Writes a plan built on the freshest versions of the files (and builds it again if the push
- * has to be retried).
+ * has to be retried). Closed tasks older than tasks.ARCHIVE_AFTER_DAYS move, in the same commit,
+ * to the archive of the year they were closed (tasks-YYYY.json).
  * @param {Ctx} ctx @param {(t: TasksDoc, g: GoalsDoc | null) => Plan} build
  */
 function writeTasks(ctx, build) {
   const { cfg } = ctx;
-  return commitFiles(cfg, [cfg.tasks, cfg.goals], (docs) => {
+  // Archives that may receive tasks, from the local copy (the files must be known before reading).
+  const local = readJsonIfExists(cfg, cfg.tasks);
+  const years = local ? Object.keys(tasks.splitArchive(tasks.normalize(local), ctx.today).byYear) : [];
+  const archives = years.map((y) => tasks.archivePath(cfg.tasks, y));
+  return commitFiles(cfg, [cfg.tasks, cfg.goals, ...archives], (docs) => {
     const tBefore = docs[cfg.tasks] ? tasks.normalize(docs[cfg.tasks]) : tasks.emptyDoc(ctx.tz);
     const gBefore = docs[cfg.goals] ? normalize(docs[cfg.goals]) : null;
     const plan = build(tBefore, gBefore);
@@ -364,9 +384,21 @@ function writeTasks(ctx, build) {
     const files = {};
     const messages = [];
     if (plan.tasks.length) {
-      const after = tasks.applyOps(tBefore, plan.tasks);
-      files[cfg.tasks] = tasks.serialize(after);
+      let after = tasks.applyOps(tBefore, plan.tasks);
       messages.push(tasks.commitMessage(plan.tasks, tBefore, after));
+      const split = tasks.splitArchive(after, ctx.today);
+      let moved = 0;
+      for (const [year, list] of Object.entries(split.byYear)) {
+        const rel = tasks.archivePath(cfg.tasks, year);
+        if (!(rel in docs)) continue; // a year not seen in the local copy: next time
+        const archive = docs[rel] ? tasks.normalize(docs[rel]) : tasks.emptyDoc(after.timeZone);
+        const ids = new Set(list.map((t) => t.id));
+        files[rel] = tasks.serialize({ ...archive, tasks: [...archive.tasks.filter((t) => !ids.has(t.id)), ...list] });
+        after = { ...after, tasks: after.tasks.filter((t) => !ids.has(t.id)) };
+        moved += list.length;
+      }
+      files[cfg.tasks] = tasks.serialize(after);
+      if (moved) messages.push(`tasks: archived ${moved} closed ${moved === 1 ? 'task' : 'tasks'}`);
     }
     if (plan.goals?.length && gBefore) {
       const after = applyOps(gBefore, plan.goals);

@@ -148,3 +148,6 @@ Plain HTML + JS, no build step, with `// @ts-check` and JSDoc types.
 python3 tools/serve.py 8000   # open http://localhost:8000 (no caching, so a reload shows every change)
 node --test tests/*.test.mjs  # logic and CLI tests (the CLI ones use temporary git repos)
 ```
+- Closed tasks stay in `tasks.json` for 30 days; the next CLI write moves older ones to the archive of the year they
+  were closed (`tasks-2026.json`, same folder), so the file the app downloads stays small. `compass tasks --archived`
+  lists them.

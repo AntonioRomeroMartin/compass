@@ -4,7 +4,7 @@
 // Data is cached separately in localStorage; calls to api.github.com do not go through here.
 // Bump VERSION when the SHELL list changes (content updates by itself: network first).
 
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE = `compass-${VERSION}`;
 const SHELL = [
   './',

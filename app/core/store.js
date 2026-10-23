@@ -58,6 +58,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
   const s = {
     /** @type {D} */ base: empty(),
     /** @type {string|null} null = the file does not exist on GitHub yet */ sha: null,
+    /** @type {string|null} of the last read: the next one downloads nothing if the file did not change */ etag: null,
     /** @type {O[]} */ pending: [],
     /** @type {string|null} */ fetchedAt: null,
     loaded: false,
@@ -78,20 +79,26 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
   };
 
   const save = () => {
-    lsSet(keys.cache, { doc: s.base, sha: s.sha, fetchedAt: s.fetchedAt });
+    lsSet(keys.cache, { doc: s.base, sha: s.sha, etag: s.etag, fetchedAt: s.fetchedAt });
     lsSet(keys.pending, s.pending.length ? s.pending : null);
   };
 
-  /** Reads the file; a missing one counts as empty. */
-  async function read() {
+  /**
+   * Reads the file; a missing one counts as empty (unless it is required). With `known`, the version in hand
+   * is sent as an ETag and null comes back if it is still the current one.
+   * @param {boolean} [known]
+   * @returns {Promise<{ doc: D, sha: string|null, etag: string|null } | null>}
+   */
+  async function read(known = false) {
     const t = /** @type {RepoConfig} */ (target());
     try {
-      const { text, sha } = await readFile(t);
-      return { doc: mod.normalize(JSON.parse(text)), sha };
+      const res = await readFile(t, known ? s.etag : null);
+      if (res.unchanged) return null;
+      return { doc: mod.normalize(JSON.parse(res.text)), sha: res.sha, etag: res.etag };
     } catch (err) {
       if (err instanceof GitHubError && err.status === 404) {
         if (required) throw new Error(`${t.path} was not found in ${t.owner}/${t.repo}. Check the repo and file in More → GitHub connection.`);
-        return { doc: empty(), sha: null };
+        return { doc: empty(), sha: null, etag: null };
       }
       throw err;
     }
@@ -101,9 +108,8 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
     // While saving, the save itself brings the new version (and a read started now could land after it, older).
     if (!target() || s.saving) return;
     try {
-      const { doc, sha } = await read();
-      s.base = doc;
-      s.sha = sha;
+      const fresh = await read(s.loaded || !!s.fetchedAt);
+      if (fresh) ({ doc: s.base, sha: s.sha, etag: s.etag } = fresh);
       s.fetchedAt = new Date().toISOString();
       s.loaded = true;
       s.online = true;
@@ -144,7 +150,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
           const conflict = err instanceof GitHubError && (err.status === 409 || err.status === 422);
           if (!conflict || attempt >= 3) throw err;
           // Someone else (another device, the CLI) changed the file: re-read and re-apply on top.
-          ({ doc: s.base, sha: s.sha } = await read());
+          ({ doc: s.base, sha: s.sha, etag: s.etag } = /** @type {{ doc: D, sha: string|null, etag: string|null }} */ (await read()));
         }
       }
     } catch (err) {
@@ -171,6 +177,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
     clearTimeout(timer);
     s.base = empty();
     s.sha = null;
+    s.etag = null;
     s.pending = [];
     s.fetchedAt = null;
     s.loaded = false;
@@ -184,6 +191,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
   if (cache?.doc) {
     s.base = mod.normalize(cache.doc);
     s.sha = cache.sha ?? null;
+    s.etag = cache.etag ?? null;
     s.fetchedAt = cache.fetchedAt ?? null;
   }
   s.pending = lsGet(keys.pending) ?? [];

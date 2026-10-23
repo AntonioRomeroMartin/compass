@@ -235,3 +235,15 @@ test('task delete needs --yes and removes the task, closed ones too', () => {
   run('task', 'delete', 'errand', '--yes');
   assert.deepEqual(read('a', 'tasks.json').tasks, []);
 });
+
+test('closed tasks older than 30 days move to the archive of their year on the next write', () => {
+  const old = { id: 't_old', title: 'Old exam', domain: 'sport', status: 'done', doneAt: '2025-03-01T10:00:00.000Z', createdAt: '2025-02-01T10:00:00.000Z' };
+  const recent = { id: 't_new', title: 'Recent run', domain: 'sport', status: 'done', doneAt: new Date().toISOString(), createdAt: new Date().toISOString() };
+  const { run, read } = setupWithDomains({ 'tasks.json': { version: 1, timeZone: 'UTC', tasks: [old, recent] } });
+  const out = run('task', 'add', 'Next one', '--domain', 'sport');
+  assert.match(out, /archived 1 closed task/);
+  assert.deepEqual(read('a', 'tasks.json').tasks.map((/** @type {any} */ t) => t.id).sort(), ['t_new', read('a', 'tasks.json').tasks.find((/** @type {any} */ t) => t.title === 'Next one').id].sort());
+  assert.deepEqual(read('a', 'tasks-2025.json').tasks.map((/** @type {any} */ t) => t.id), ['t_old']);
+  assert.match(run('tasks', '--archived'), /Old exam/);
+  assert.doesNotMatch(run('tasks', '--all'), /Old exam/);
+});
