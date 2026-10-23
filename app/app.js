@@ -810,7 +810,7 @@ function openSettings() {
   f.token.value = cfg?.token ?? '';
   f.owner.value = cfg?.owner ?? '';
   f.repo.value = cfg?.repo ?? '';
-  f.path.value = cfg?.path ?? 'goals.json';
+  f.path.value = cfg?.path ?? 'data/goals.json';
   f.branch.value = cfg?.branch ?? 'main';
   const msg = $('settings-msg');
   msg.textContent = '';

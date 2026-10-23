@@ -8,7 +8,7 @@ A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearl
 2. Create a *fine-grained* token in GitHub → Settings → Developer settings → Fine-grained tokens:
    - *Repository access*: **Only select repositories** → that repo.
    - *Permissions* → *Contents*: **Read and write**. Nothing else.
-3. Open the app, tap ⚙ and enter the token, your username, the repo, the file (default `goals.json`) and the branch. If the file doesn't exist, the app creates an empty one.
+3. Open the app, tap ⚙ and enter the token, your username, the repo, the goals file (default `data/goals.json`; tasks and areas go next to it) and the branch. If the file doesn't exist, the app creates an empty one.
 4. Create your categories (“Categories” button) and your goals. On a phone you can install it as an app.
 
 ## Privacy
