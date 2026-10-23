@@ -13,8 +13,9 @@
   --radius: 14px;
   color-scheme: light;
 }
+/* dark: when the system asks for it (unless light was chosen), or when chosen with the header button */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #17171a;
     --surface: #212125;
     --text: #ecebe8;
@@ -29,6 +30,20 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #17171a;
+  --surface: #212125;
+  --text: #ecebe8;
+  --muted: #a09f9a;
+  --border: #34343a;
+  --accent: #6cc3a6;
+  --accent-soft: #23392f;
+  --warn: #f0b75a;
+  --warn-soft: #3a2f1a;
+  --danger: #f2837a;
+  --danger-soft: #3d2220;
+  color-scheme: dark;
+  }
 
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }

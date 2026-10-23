@@ -19,7 +19,7 @@ const { categoryUsage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, s
 /** @typedef {'today'|'areas'|'goals'|'more'} Tab */
 
 // localStorage keys keep the "goals." prefix of the first version, so existing devices keep their settings.
-const LS = { cfg: 'goals.cfg', ui: 'goals.ui' };
+const LS = { cfg: 'goals.cfg', ui: 'goals.ui', theme: 'compass.theme' };
 /** @type {Tab[]} */
 const TABS = ['today', 'areas', 'goals', 'more'];
 /** @type {Record<Tab, string>} */
@@ -938,9 +938,33 @@ function renderManage() {
     : `The file has no time zone; using this device's (${deviceTimeZone()}).`;
 }
 
+// ---------------------------------------------------------------- theme
+
+/** Light or dark as shown now: the one chosen on this device, or the system's. */
+const shownTheme = () => document.documentElement.dataset.theme
+  ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+/** @param {string|null} theme 'light' | 'dark' | null (follow the system) */
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  const dark = shownTheme() === 'dark';
+  const btn = $('theme');
+  btn.textContent = dark ? '☀' : '☾';
+  btn.title = dark ? 'Switch to light' : 'Switch to dark';
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.setAttribute('content', dark ? '#17171a' : '#f6f5f1');
+}
+
 // ---------------------------------------------------------------- startup
 
 function init() {
+  applyTheme(lsGet(LS.theme));
+  $('theme').addEventListener('click', () => {
+    const next = shownTheme() === 'dark' ? 'light' : 'dark';
+    lsSet(LS.theme, next);
+    applyTheme(next);
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(lsGet(LS.theme)));
   state.cfg = lsGet(LS.cfg);
   const ui = lsGet(LS.ui);
   if (ui) {
