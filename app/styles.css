@@ -187,7 +187,7 @@ fieldset.subgoals > .link { justify-self: start; }
   .tabs button { flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 12px; font-size: .95rem; text-align: left; }
   .tabs button[aria-current="page"] { background: var(--accent-soft); }
   .tabs .ico { width: 1.4em; text-align: center; font-size: 1.05rem; }
-  .tabs .tab-add { order: -1; margin-bottom: 10px; background: var(--accent); color: var(--bg); font-weight: 600; justify-content: center; }
+  .tabs .tab-add { order: 10; margin-top: auto; background: var(--accent); color: var(--bg); font-weight: 600; justify-content: center; }
   .tabs .tab-add .ico { width: auto; height: auto; background: none; font-size: 1.1rem; margin: 0; }
   .tabs .tab-add > span:last-child { display: inline; }
   .page { margin-left: 220px; margin-right: 0; max-width: 760px; padding: 8px 32px 40px; }
@@ -253,3 +253,13 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 .link.back { text-decoration: none; font-size: .95rem; }
 .sub-filter { margin-bottom: 4px; }
 .empty.small { padding: 16px 0; }
+
+/* sidebar: areas indented under "Areas" */
+.nav-areas { display: none; }
+@media (min-width: 900px) {
+  .nav-areas:not([hidden]) { display: grid; gap: 1px; margin: 2px 0 6px; }
+  .nav-area { background: none; border: 0; text-align: left; color: var(--muted); font-size: .9rem; padding: 6px 12px 6px 46px; border-radius: 8px; }
+  .nav-area.depth-1 { padding-left: 62px; font-size: .84rem; }
+  .nav-area:hover { color: var(--text); }
+  .nav-area[aria-current="page"] { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+}

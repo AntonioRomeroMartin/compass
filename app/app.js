@@ -172,6 +172,29 @@ function renderTabs() {
     /** @type {HTMLElement} */ (sec).hidden = /** @type {HTMLElement} */ (sec).dataset.viewOf !== state.tab;
   }
   $('page-title').textContent = TAB_TITLE[state.tab];
+  renderNavAreas();
+}
+
+/** Sidebar (wide screens): the areas, indented under "Areas" while it is open. */
+function renderNavAreas() {
+  const box = $('nav-areas');
+  const doms = domainsStore.current();
+  box.hidden = state.tab !== 'areas' || !doms.domains.length;
+  if (box.hidden) return;
+  /** @type {HTMLElement[]} */
+  const items = [];
+  /** @param {string} parent @param {number} depth */
+  const walk = (parent, depth) => {
+    for (const d of doms.domains.filter((x) => (x.parent ?? '') === parent)) {
+      const current = state.subArea ? state.subArea === d.id : state.area === d.id;
+      const btn = h('button', { class: `nav-area depth-${depth}`, onclick: () => openArea(d.id) }, d.name);
+      if (current) btn.setAttribute('aria-current', 'page');
+      items.push(btn);
+      walk(d.id, depth + 1);
+    }
+  };
+  walk('', 0);
+  box.replaceChildren(...items);
 }
 
 /** @param {Tab} tab */
@@ -583,8 +606,11 @@ function areaIds(id) {
 
 /** @param {string} id */
 function openArea(id) {
-  state.area = id;
-  state.subArea = '';
+  const d = id ? domainsLib.find(domainsStore.current(), id) : null;
+  // A sub-area opens its parent's page with the filter on it.
+  state.area = d?.parent ? d.parent : id;
+  state.subArea = d?.parent ? id : '';
+  state.tab = 'areas';
   persist();
   render();
   window.scrollTo(0, 0);
