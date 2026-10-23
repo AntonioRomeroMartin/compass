@@ -3,9 +3,9 @@
 // operations not saved yet (pending), both cached in localStorage. Writes are grouped every ~2 s; if
 // someone else changed the file, the pending operations are applied again on top of the new version.
 
-import { GitHubError, readFile, writeFile } from '../lib/github.js';
+import { GitHubError, readFile, writeFile } from '../../lib/github.js';
 
-/** @typedef {import('../lib/github.js').RepoConfig} RepoConfig */
+/** @typedef {import('../../lib/github.js').RepoConfig} RepoConfig */
 
 /**
  * The pure functions of a data module (lib/goals.js, lib/tasks.js, lib/domains.js).

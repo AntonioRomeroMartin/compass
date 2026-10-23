@@ -11,7 +11,12 @@ Each user's data lives in their own private repo.
   (the CSP in `index.html` only allows `'self'` and `https://api.github.com`).
 - Structure: `lib/` (logic shared by app and CLI: `period.js`, `goals.js`, `tasks.js`, `domains.js`, `today.js`,
   `github.js`), `app/` (PWA; `index.html` and `sw.js` at the root), `cli/` (`compass.mjs` + `repo.mjs`: git on a local
-  checkout, same operations as the app). Periods and civil dates are computed in the `timeZone` of the data file.
+  checkout, same operations as the app).
+- App: `app/core/` (state and one synced store per data file, DOM helpers), `app/modules/<name>/view.js` (one per
+  kind of data: its rows and sheets, plus `areaSections` for an area's page and `homeCard` for Home; registered in
+  `app/modules/index.js`), `app/views/` (pages that combine modules: home, today, areas, settings), `app/app.js`
+  (navigation, status, start-up). A new module = its model in `lib/` + a folder in `app/modules/` + one line in the
+  registry; it must not need changes in other modules. Periods and civil dates are computed in the `timeZone` of the data file.
 - One module per kind of data, each with its own file in the data repo and the same shape: `normalize`, `applyOps`
   (operations re-applied on the latest version), `serialize`, `commitMessage`, plus `summary` for the Today view (goals, tasks).
 - JSON schema: see the types in `lib/goals.js` (`Goal`, `GoalsDoc`), `lib/tasks.js` (`Task`, `TasksDoc`) and

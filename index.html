@@ -19,7 +19,8 @@
 <body>
   <nav class="tabs" aria-label="Sections">
     <span class="brand">Compass</span>
-    <button data-tab="today" aria-current="page"><span class="ico" aria-hidden="true">◎</span><span>Today</span></button>
+    <button data-tab="home" aria-current="page"><span class="ico" aria-hidden="true">⌂</span><span>Home</span></button>
+    <button data-tab="today"><span class="ico" aria-hidden="true">◎</span><span>Today</span></button>
     <button data-tab="areas"><span class="ico" aria-hidden="true">▦</span><span>Areas</span></button>
     <div id="nav-areas" class="nav-areas" hidden></div>
     <button id="add" class="tab-add" aria-label="New"><span class="ico" aria-hidden="true">+</span><span>New</span></button>
@@ -30,7 +31,7 @@
   <div class="page">
     <header class="top">
       <div>
-        <h1 id="page-title">Today</h1>
+        <h1 id="page-title">Home</h1>
         <p id="today" class="today"></p>
       </div>
       <div class="top-actions">
@@ -42,7 +43,9 @@
 
     <div id="banner" class="banner" hidden></div>
 
-    <section id="view-today" data-view-of="today"></section>
+    <section id="view-home" data-view-of="home"></section>
+
+    <section id="view-today" data-view-of="today" hidden></section>
 
     <section id="view-areas" data-view-of="areas" hidden></section>
 

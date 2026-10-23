@@ -139,10 +139,11 @@ Plain HTML + JS, no build step, with `// @ts-check` and JSDoc types.
 - `lib/`: shared logic, used by the app and the CLI: period keys and civil dates (`period.js`), the data model and
   operations of each data file (`goals.js`, `tasks.js`, `domains.js`), the Today view (`today.js`) and the GitHub
   API (`github.js`).
-- `app/`: the PWA (`index.html` and `sw.js` stay at the root).
+- `app/`: the PWA (`index.html` and `sw.js` stay at the root): `core/` (sync and helpers), `modules/` (one folder
+  per kind of data, each adding its part to an area's page and to Home), `views/` (Home, Today, Areas, settings).
 - `cli/`: the command line.
 
 ```bash
-python3 -m http.server 8000   # open http://localhost:8000
+python3 tools/serve.py 8000   # open http://localhost:8000 (no caching, so a reload shows every change)
 node --test tests/*.test.mjs  # logic and CLI tests (the CLI ones use temporary git repos)
 ```
