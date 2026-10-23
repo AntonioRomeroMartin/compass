@@ -4,17 +4,17 @@
 // Los datos se cachean aparte en localStorage; las llamadas a api.github.com no pasan por aquí.
 // Sube VERSION cuando cambie la lista SHELL (el contenido se actualiza solo: red primero).
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `goals-${VERSION}`;
 const SHELL = [
   './',
   './index.html',
-  './styles.css',
+  './app/styles.css',
   './manifest.webmanifest',
-  './js/app.js',
-  './js/store.js',
-  './js/github.js',
-  './js/period.js',
+  './app/app.js',
+  './lib/goals.js',
+  './lib/github.js',
+  './lib/period.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

@@ -37,13 +37,32 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`, `o
 - **One-off goals** (`repeat: false`, the default): the horizon is when the goal expires. A weekly goal created now belongs to the current week (`period`), and when the week ends it moves to **Past** as completed or missed.
 - **Habits** (`repeat: true`): the goal renews every period and progress starts again from 0; history is kept per period.
 - **Sub-goals** (optional): steps towards a goal, ticked off on its card. `done` lists the period keys in which each one was completed, so a habit's sub-goals start unticked every period.
-- **With deadline**: accumulates under `once` and moves to Past the day after `deadline`. `js/period.js` also works as a Node CLI: `node js/period.js --file goals.json`.
+- **With deadline**: accumulates under `once` and moves to Past the day after `deadline`.
+
+## Command line (optional)
+
+`cli/compass.mjs` reads and changes the same data from a local git checkout of your data repo, with the same
+operations as the app (it pulls before reading, commits and pushes after writing, and reapplies its change if the
+remote moved meanwhile). Needs Node 20+.
+
+```bash
+ln -s "$PWD/cli/compass.mjs" ~/.local/bin/compass
+mkdir -p ~/.config/compass
+echo '{ "repo": "/path/to/your/data-repo", "goals": "goals.json" }' > ~/.config/compass/config.json
+compass today                 # goals for today and this week, deadlines within 7 days
+compass goal inc "gym" 1      # a goal by id or part of its title
+compass help
+```
 
 ## Development
 
 Plain HTML + JS, no build step, with `// @ts-check` and JSDoc types.
 
+- `lib/`: shared logic (period keys, data model and operations, GitHub API), used by the app and the CLI.
+- `app/`: the PWA (`index.html` and `sw.js` stay at the root).
+- `cli/`: the command line.
+
 ```bash
 python3 -m http.server 8000   # open http://localhost:8000
-node --test tests/            # logic tests
+node --test tests/            # logic and CLI tests
 ```

@@ -8,9 +8,11 @@ Los datos de cada usuario viven en su propio repo privado.
 - Nombres de archivos y carpetas SIEMPRE en inglés.
 - HTML + JS sin build, con `// @ts-check` y tipos JSDoc. Ningún script ni recurso de terceros
   (la CSP de `index.html` solo permite `'self'` y `https://api.github.com`).
-- `js/period.js` puede tener una copia idéntica fuera de este repo (CLI); si lo cambias,
-  indícalo al terminar para sincronizarla. Los periodos se calculan en la `timeZone` del archivo de datos.
-- Esquema del JSON: ver `js/store.js` (tipos `Goal` y `GoalsDoc`). Commits de la app con prefijo `goals:`.
+- Estructura: `lib/` (lógica compartida por app y CLI: `period.js`, `goals.js`, `github.js`), `app/` (PWA; `index.html`
+  y `sw.js` en la raíz), `cli/` (`compass.mjs` + `repo.mjs`: git sobre un checkout local, mismas operaciones que la app).
+  Los periodos se calculan en la `timeZone` del archivo de datos.
+- Esquema del JSON: ver `lib/goals.js` (tipos `Goal` y `GoalsDoc`). Commits de datos con prefijo `goals:`.
+- Lógica nueva, en `lib/` y usada por los dos lados; nunca duplicada entre app y CLI.
 - Antes de subir: `node --test tests/`. Si cambia la lista `SHELL` de `sw.js`, sube `VERSION`.
 
 ## Guardar el progreso

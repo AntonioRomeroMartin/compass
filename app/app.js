@@ -1,14 +1,14 @@
 // @ts-check
-import { HORIZONS, periodKey, periodKeys, daysUntil, civilDate, deviceTimeZone, isValidTimeZone } from './period.js';
-import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from './store.js';
-import { GitHubError, readFile, writeFile } from './github.js';
+import { HORIZONS, periodKey, periodKeys, daysUntil, civilDate, deviceTimeZone, isValidTimeZone } from '../lib/period.js';
+import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import { GitHubError, readFile, writeFile } from '../lib/github.js';
 
-/** @typedef {import('./store.js').Goal} Goal */
-/** @typedef {import('./store.js').GoalsDoc} GoalsDoc */
-/** @typedef {import('./store.js').Op} Op */
-/** @typedef {import('./store.js').Subgoal} Subgoal */
-/** @typedef {import('./period.js').Horizon} Horizon */
-/** @typedef {import('./github.js').RepoConfig} RepoConfig */
+/** @typedef {import('../lib/goals.js').Goal} Goal */
+/** @typedef {import('../lib/goals.js').GoalsDoc} GoalsDoc */
+/** @typedef {import('../lib/goals.js').Op} Op */
+/** @typedef {import('../lib/goals.js').Subgoal} Subgoal */
+/** @typedef {import('../lib/period.js').Horizon} Horizon */
+/** @typedef {import('../lib/github.js').RepoConfig} RepoConfig */
 
 const SAVE_DELAY_MS = 2000;
 const LS = { cfg: 'goals.cfg', cache: 'goals.cache', pending: 'goals.pending', ui: 'goals.ui' };

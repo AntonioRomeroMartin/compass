@@ -1,9 +1,9 @@
 // Pruebas de la lógica sin dependencias: `node --test tests/`
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { periodKey, periodKeys, daysUntil, civilDate, isValidTimeZone } from '../js/period.js';
-import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, normalize, serialize, subgoalsDone } from '../js/store.js';
-import { encodeBase64, decodeBase64 } from '../js/github.js';
+import { periodKey, periodKeys, daysUntil, civilDate, isValidTimeZone } from '../lib/period.js';
+import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import { encodeBase64, decodeBase64 } from '../lib/github.js';
 
 const UTC = 'UTC';
 const BERLIN = 'Europe/Berlin'; // UTC+1 / UTC+2 en verano
