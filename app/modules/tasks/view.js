@@ -2,9 +2,9 @@
 // Tasks module (app side): task rows, the task sheet, and its parts of the area page and the Home card.
 import * as tasksLib from '../../../lib/tasks.js';
 import * as domainsLib from '../../../lib/domains.js';
-import { canEdit, current, dispatchGoals, domainsStore, inAreas, tasksStore, todayKey, tz } from '../../core/data.js';
+import { canEdit, domainsStore, inAreas, tasksStore, todayKey, tz } from '../../core/data.js';
 import { $, chipPicker, editRow, h } from '../../core/ui.js';
-import { isExpired, newId } from '../../../lib/goals.js';
+import { newId } from '../../../lib/goals.js';
 import { addDays, daysUntil, endOfWeek, periodKey } from '../../../lib/period.js';
 
 /** @typedef {import('../../../lib/tasks.js').Task} Task */
@@ -18,9 +18,6 @@ export function toggleTask(t) {
   } else {
     tasksStore.dispatch([{ type: 'reopen', id: t.id }]);
   }
-  // A task linked to a goal adds (or takes back) 1.
-  const g = t.goal ? current().goals.find((x) => x.id === t.goal) : null;
-  if (g) dispatchGoals({ type: 'inc', id: g.id, delta: t.status === 'open' ? 1 : -1 });
 }
 
 /** @param {Task} t @param {boolean} [showArea] @param {boolean} [short] area chip with the sub-area's name only (inside its parent's page) */
@@ -111,10 +108,6 @@ export function openTaskForm(task, domain) {
   f.repeat.value = !r ? '' : rText === 'daily' ? 'daily' : rText === 'weekly mon,tue,wed,thu,fri' ? 'weekdays' : 'custom';
   f.repeatCustom.value = f.repeat.value === 'custom' ? rText : '';
   f.notes.value = task?.notes ?? '';
-  const now = new Date();
-  const goals = current().goals.filter((g) => !g.archived && !isExpired(g, now, tz()));
-  f.goal.replaceChildren(h('option', { value: '' }, 'None'), ...goals.map((g) => h('option', { value: g.id }, g.title)));
-  f.goal.value = task?.goal && goals.some((g) => g.id === task.goal) ? task.goal : '';
   f.location.value = task?.location ?? '';
   const subList = $('subtask-list');
   subList.replaceChildren(...(task?.subtasks ?? []).map((st) => editRow(st.id, st.title, 'Step', 'add-subtask')));
@@ -181,7 +174,6 @@ export function openTaskForm(task, domain) {
       due: dueValue(),
       repeat: rule,
       notes: String(f.notes.value).trim() || null,
-      goal: String(f.goal.value) || null,
       location: String(f.location.value).trim() || null,
     };
     const rows = Array.from(subList.querySelectorAll('li'), (li) => ({

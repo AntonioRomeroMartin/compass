@@ -56,25 +56,6 @@ test('domain is required and must be registered (by id, name or last segment)', 
   assert.deepEqual(read('a', 'tasks.json').tasks.map((/** @type {any} */ t) => t.domain), ['studies/course-a', 'sport', 'studies/course-b']);
 });
 
-test('completing a task linked to a goal adds 1 to it, in the same commit', () => {
-  const { dir, run, read } = setupWithDomains();
-  run('goal', 'add', '--title', 'Strength sessions', '--category', 'sport', '--horizon', 'week', '--target', '3');
-  run('task', 'add', 'Leg day', '--domain', 'sport', '--due', 'today', '--goal', 'strength');
-  const out = run('task', 'done', 'leg');
-  assert.match(out, /^tasks: done “Leg day” · goals: progress “Strength sessions”/);
-  const b = join(dir, 'b');
-  git(b, 'pull', '-q');
-  assert.equal(git(b, 'log', '-1', '--format=%s'), 'tasks: done “Leg day”\n');
-  assert.deepEqual(git(b, 'show', '--name-only', '--format=', 'HEAD').trim().split('\n').sort(), ['goals.json', 'tasks.json']);
-  assert.equal(read('b').goals[0].progress, 1);
-  assert.equal(read('b', 'tasks.json').tasks[0].status, 'done');
-  // Done twice: nothing changes. Undo: the goal loses that 1.
-  assert.match(run('task', 'done', read('a', 'tasks.json').tasks[0].id), /^No change\./);
-  assert.match(run('task', 'undo', 'leg'), /^tasks: reopened “Leg day” · goals: progress “Strength sessions”/);
-  assert.equal(read('a').goals[0].progress, 0);
-  assert.equal(read('a', 'tasks.json').tasks[0].status, 'open');
-});
-
 test('a repeating task creates its next occurrence when done or dropped', () => {
   const { run, read } = setupWithDomains();
   run('task', 'add', 'Water plants', '--domain', 'sport', '--repeat', 'every 3 days', '--due', '2026-01-10');
@@ -142,11 +123,11 @@ test('today --cwd: the folder\'s domain, plus the dated items of its parent', ()
   assert.doesNotMatch(run('tasks', '--due', 'today'), /Someday reading/);
 });
 
-test('if another device writes both files at the same time, everything is re-applied on top', () => {
+test('if another device writes at the same time, our change is re-applied on top of theirs', () => {
   const { dir, run, read } = setupWithDomains();
   run('goal', 'add', '--title', 'Strength sessions', '--category', 'sport', '--horizon', 'week', '--target', '3');
-  run('task', 'add', 'Leg day', '--domain', 'sport', '--goal', 'strength');
-  // A pre-push hook simulates the other clone changing the goal and the task right before our push.
+  run('task', 'add', 'Leg day', '--domain', 'sport');
+  // A pre-push hook simulates the other clone changing a goal and the task right before our push.
   const b = join(dir, 'b');
   const hook = join(dir, 'a', '.git', 'hooks', 'pre-push');
   writeFileSync(hook, `#!/bin/sh
@@ -166,7 +147,7 @@ exit 0
   const goals = read('b');
   const list = read('b', 'tasks.json');
   assert.equal(goals.goals[0].notes, 'from b');
-  assert.equal(goals.goals[0].progress, 1);
+  assert.equal(goals.goals[0].progress, 0); // completing a task does not touch goals
   assert.equal(list.tasks[0].notes, 'from b too');
   assert.equal(list.tasks[0].status, 'done');
   assert.match(git(b, 'log', '-2', '--format=%s'), /^tasks: done “Leg day”\nrace\n$/);

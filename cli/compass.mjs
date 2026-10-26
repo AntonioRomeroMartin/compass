@@ -44,13 +44,13 @@ Usage:
                                         of the day and week, deadlines within 7 days, ongoing work
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
-  compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE] [--goal G]
+  compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T] [--focus]
   compass task done|undo|drop|focus|unfocus|show <task>
   compass task delete <task> --yes      for good (drop keeps a record)
   compass task drop <task> --stop       a repeating task: no next occurrence
   compass task move <task> [DATE]       default: tomorrow
-  compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE] [--goal G]
+  compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T]          (none clears a field)
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
   compass domains
@@ -71,7 +71,7 @@ Usage:
 <task>, <goal>: an id (t_…, g_…) or part of the title. D: a domain id or name. --cwd: the domain whose
 "paths" contain that folder (a subdomain also sees the dated items of its parents).
 DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
-weekdays, monthly, monthly:15, none. A done task with --goal adds 1 to that goal.
+weekdays, monthly, monthly:15, none.
 --no-sync skips git pull/push; --timeout S limits the pull (default 3 s for today, 20 s otherwise).
 Config: ~/.config/compass/config.json →
   {"repo": "<data repo checkout>", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json"}`;
@@ -160,7 +160,6 @@ function taskLine(t, ctx, opts = {}) {
   if (opts.domain !== false) bits.push(t.domain);
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
   if (t.subtasks.length) bits.push(`sub ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`);
-  if (t.goal) bits.push(`+1 goal “${ctx.goals.goals.find((g) => g.id === t.goal)?.title ?? t.goal}”`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
   if (t.notes) bits.push('notes');
   if (t.status !== 'open' && t.doneAt) bits.push(`${t.status} ${periodKey('day', new Date(t.doneAt), ctx.tz)}`);
@@ -358,16 +357,15 @@ function listTasks(ctx, flags) {
 }
 
 /**
- * A change to tasks.json, plus goals.json when a linked goal gets (or loses) progress:
- * both go in one commit.
- * @typedef {{ tasks: import('../lib/tasks.js').Op[], goals?: Op[] }} Plan
+ * A change to tasks.json.
+ * @typedef {{ tasks: import('../lib/tasks.js').Op[] }} Plan
  */
 
 /**
  * Writes a plan built on the freshest versions of the files (and builds it again if the push
  * has to be retried). Closed tasks older than tasks.ARCHIVE_AFTER_DAYS move, in the same commit,
  * to the archive of the year they were closed (tasks-YYYY.json).
- * @param {Ctx} ctx @param {(t: TasksDoc, g: GoalsDoc | null) => Plan} build
+ * @param {Ctx} ctx @param {(t: TasksDoc) => Plan} build
  */
 function writeTasks(ctx, build) {
   const { cfg } = ctx;
@@ -375,10 +373,9 @@ function writeTasks(ctx, build) {
   const local = readJsonIfExists(cfg, cfg.tasks);
   const years = local ? Object.keys(tasks.splitArchive(tasks.normalize(local), ctx.today).byYear) : [];
   const archives = years.map((y) => tasks.archivePath(cfg.tasks, y));
-  return commitFiles(cfg, [cfg.tasks, cfg.goals, ...archives], (docs) => {
+  return commitFiles(cfg, [cfg.tasks, ...archives], (docs) => {
     const tBefore = docs[cfg.tasks] ? tasks.normalize(docs[cfg.tasks]) : tasks.emptyDoc(ctx.tz);
-    const gBefore = docs[cfg.goals] ? normalize(docs[cfg.goals]) : null;
-    const plan = build(tBefore, gBefore);
+    const plan = build(tBefore);
     /** @type {Record<string, string>} */
     const files = {};
     const messages = [];
@@ -399,28 +396,8 @@ function writeTasks(ctx, build) {
       files[cfg.tasks] = tasks.serialize(after);
       if (moved) messages.push(`tasks: archived ${moved} closed ${moved === 1 ? 'task' : 'tasks'}`);
     }
-    if (plan.goals?.length && gBefore) {
-      const after = applyOps(gBefore, plan.goals);
-      files[cfg.goals] = serialize(after);
-      messages.push(commitMessage(plan.goals, gBefore, after));
-    }
     return messages.length ? { files, message: messages.join('\n\n') } : null;
   }, { sync: ctx.sync });
-}
-
-/**
- * +delta on a linked goal, in its current period (nothing if it is gone, archived or expired).
- * @param {Ctx} ctx @param {GoalsDoc | null} doc @param {string | null} id @param {number} delta
- * @returns {Op[]}
- */
-function goalCredit(ctx, doc, id, delta) {
-  if (!id) return [];
-  const g = doc?.goals.find((x) => x.id === id);
-  if (!g || g.archived || isExpired(g, ctx.now, ctx.gtz)) {
-    console.error(`note: the linked goal ${id} is not active; its progress is not changed`);
-    return [];
-  }
-  return [{ type: 'inc', id, delta }];
 }
 
 /**
@@ -433,11 +410,9 @@ function task(ctx, sub, rest, flags) {
   const date = (text) => attempt(() => tasks.parseDue(text, ctx.today));
   /** @param {string} text @param {string} anchor */
   const rule = (text, anchor) => attempt(() => tasks.parseRepeat(text, anchor));
-  /** @param {string | true | undefined} ref */
-  const goalId = (ref) => (str(ref) === undefined || orNull(str(ref)) === null ? null : findGoal(ctx.goals, str(ref)).id);
   /** @type {string | null} */
   let id = null;
-  /** @type {(t: TasksDoc, g: GoalsDoc | null) => Plan} */
+  /** @type {(t: TasksDoc) => Plan} */
   let build;
 
   if (sub === 'add') {
@@ -449,7 +424,7 @@ function task(ctx, sub, rest, flags) {
     const repeat = str(flags.repeat) ? rule(/** @type {string} */ (str(flags.repeat)), due ?? ctx.today) : null;
     const t = tasks.newTask({
       title, domain: /** @type {string} */ (scope.id), due: repeat && !due ? tasks.firstDue(repeat, ctx.today) : due,
-      repeat, goal: goalId(flags.goal), ongoing: orNull(str(flags.ongoing)), notes: orNull(str(flags.notes)),
+      repeat, ongoing: orNull(str(flags.ongoing)), notes: orNull(str(flags.notes)),
     }, ctx.now);
     id = t.id;
     build = (fresh) => {
@@ -466,13 +441,10 @@ function task(ctx, sub, rest, flags) {
       case 'show':
         return showTask(t, ctx);
       case 'done':
-        build = (fresh, goals) => {
+        build = (fresh) => {
           const cur = live(fresh);
           if (cur.status !== 'open') return { tasks: [] };
-          return {
-            tasks: [{ type: 'done', id: tid, at, today: ctx.today, nextId: cur.repeat ? newId('t_') : null }],
-            goals: goalCredit(ctx, goals, cur.goal, 1),
-          };
+          return { tasks: [{ type: 'done', id: tid, at, today: ctx.today, nextId: cur.repeat ? newId('t_') : null }] };
         };
         break;
       case 'drop':
@@ -483,10 +455,10 @@ function task(ctx, sub, rest, flags) {
         };
         break;
       case 'undo':
-        build = (fresh, goals) => {
+        build = (fresh) => {
           const cur = live(fresh);
           if (cur.status === 'open') return { tasks: [] };
-          return { tasks: [{ type: 'reopen', id: tid }], goals: cur.status === 'done' ? goalCredit(ctx, goals, cur.goal, -1) : [] };
+          return { tasks: [{ type: 'reopen', id: tid }] };
         };
         break;
       case 'delete':
@@ -518,7 +490,6 @@ function task(ctx, sub, rest, flags) {
           fields.repeat = rule(/** @type {string} */ (str(flags.repeat)), fields.due ?? t.due ?? ctx.today);
           if (fields.repeat && !(fields.due ?? t.due)) fields.due = tasks.firstDue(fields.repeat, ctx.today);
         }
-        if (str(flags.goal) !== undefined) fields.goal = goalId(flags.goal);
         for (const k of /** @type {const} */ (['notes', 'ongoing'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
         if (!Object.keys(fields).length) fail('nothing to edit');
         build = () => ({ tasks: [{ type: 'edit', id: tid, fields }] });

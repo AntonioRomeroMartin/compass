@@ -76,7 +76,7 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   "timeZone": "Area/City",
   "tasks": [{ "id": "t_…", "title": "…", "domain": "studies/course-a", "due": "2026-10-30", "notes": null,
               "subtasks": [{ "id": "s_…", "title": "…", "done": false }],
-              "repeat": { "type": "weekly", "days": [1, 4] }, "focus": false, "goal": "g_…",
+              "repeat": { "type": "weekly", "days": [1, 4] }, "focus": false,
               "ongoing": "notes/draft.md", "status": "open", "createdAt": "…", "doneAt": null }]
 }
 ```
@@ -88,7 +88,6 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   `{"type": "monthly", "day": 1…31}` (past the end of a short month it falls on its last day). Closing a repeating
   task creates the next occurrence as a new task (the closed one keeps its id in `next`). The next date counts
   from the due date, or from today when the task was late, so a late completion does not pile up overdue copies.
-- `goal`: completing the task adds 1 to that goal, in the same commit; undoing it takes the 1 back.
 - `ongoing`: path of a text file with the state of work in progress; "today" lists these tasks even without a date.
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 
@@ -96,7 +95,7 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 
 `cli/compass.mjs` reads and changes the same data from a local git checkout of your data repo, with the same
 operations as the app (it pulls before reading, commits and pushes after writing, and reapplies its change if the
-remote moved meanwhile; a task and its linked goal change in one commit). A missing `tasks.json` or `domains.json`
+remote moved meanwhile). A missing `tasks.json` or `domains.json`
 is created on the first write. Needs Node 20+.
 
 ```bash
@@ -105,7 +104,7 @@ mkdir -p ~/.config/compass
 echo '{ "repo": "/path/to/your/data-repo", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json" }' \
   > ~/.config/compass/config.json
 compass domain add studies --name Studies --path ~/projects/studies
-compass task add "Problem set 3" --domain studies --due fri --goal "study sessions"
+compass task add "Problem set 3" --domain studies --due fri
 compass task add "Water plants" --domain home --repeat "every 3 days"
 compass task done "problem set"       # a task by id or part of its title
 compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none
@@ -122,7 +121,7 @@ Scope: Studies › Course A [studies/course-a] + dated items of Studies (from --
 Focus
   ⭐ [t_…] Lab report — due 2026-10-24 (tomorrow) · studies/course-a
 Studies › Course A [studies/course-a]
-  · [t_…] Problem set 3 — due 2026-10-21 (2 d late) · +1 goal “Study sessions”
+  · [t_…] Problem set 3 — due 2026-10-21 (2 d late)
   ↳ ongoing [t_…] Thesis draft → notes/thesis.md
 Studies [studies] · parent, dated only
   · [t_…] Exam registration — due 2026-10-25 (in 2 d)
