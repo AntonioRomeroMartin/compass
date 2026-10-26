@@ -3,7 +3,7 @@
 // compass CLI: for scripts and agents (and anyone else) to read and change the data without editing
 // the JSON by hand. Shares its logic with the app (`lib/`) and writes with operations, like the app.
 
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
@@ -46,6 +46,8 @@ Usage:
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T] [--focus]
+  compass task add --stdin [options]    one task per line ("title" --due fri …), all in one commit;
+                                        options given here apply to every line
   compass task done|undo|drop|focus|unfocus|show <task>
   compass task delete <task> --yes      for good (drop keeps a record)
   compass task drop <task> --stop       a repeating task: no next occurrence
@@ -77,7 +79,7 @@ Config: ~/.config/compass/config.json →
   {"repo": "<data repo checkout>", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json"}`;
 
 /** Flags that never take a value. */
-const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes']);
+const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes', 'stdin']);
 
 /** @param {string[]} argv */
 function parse(argv) {
@@ -97,15 +99,51 @@ function parse(argv) {
   return { pos, flags };
 }
 
+/**
+ * Splits a line into arguments the way a shell does: spaces separate them, "double quotes" (with \" and \\)
+ * and 'single quotes' keep them together.
+ * @param {string} line
+ */
+function splitArgs(line) {
+  /** @type {string[]} */
+  const out = [];
+  let cur = '';
+  let started = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === "'" || c === '"') {
+      started = true;
+      const end = c;
+      for (i++; i < line.length && line[i] !== end; i++) {
+        if (end === '"' && line[i] === '\\' && (line[i + 1] === '"' || line[i + 1] === '\\')) i++;
+        cur += line[i];
+      }
+      if (i >= line.length) fail(`unclosed ${end} in: ${line}`);
+    } else if (/\s/.test(c)) {
+      if (started) out.push(cur);
+      cur = '';
+      started = false;
+    } else {
+      cur += c;
+      started = true;
+    }
+  }
+  if (started) out.push(cur);
+  return out;
+}
+
 /** @param {string | true | undefined} v */
 const str = (v) => (typeof v === 'string' ? v : undefined);
+
+/** Prefix for errors (the line being read with --stdin). */
+let failContext = '';
 
 /**
  * @param {string} msg
  * @returns {never}
  */
 function fail(msg) {
-  console.error(`error: ${msg}`);
+  console.error(`error: ${failContext}${msg}`);
   process.exit(1);
 }
 
@@ -410,31 +448,65 @@ function task(ctx, sub, rest, flags) {
   const date = (text) => attempt(() => tasks.parseDue(text, ctx.today));
   /** @param {string} text @param {string} anchor */
   const rule = (text, anchor) => attempt(() => tasks.parseRepeat(text, anchor));
-  /** @type {string | null} */
-  let id = null;
+  /** @type {string[]} tasks to show once saved */
+  let ids = [];
   /** @type {(t: TasksDoc) => Plan} */
   let build;
 
-  if (sub === 'add') {
-    const title = rest[0] ?? str(flags.title);
+  /**
+   * A new task from the arguments of `task add`.
+   * @param {string[]} args @param {Record<string, string | true>} opts
+   */
+  const newOne = (args, opts) => {
+    const title = args[0] ?? str(opts.title);
     if (!title) fail('task add needs a title: compass task add "title" --domain D');
-    const scope = scopeFrom(ctx, flags);
+    const scope = scopeFrom(ctx, opts);
     if (!scope.id) fail(scope.note ? `${scope.note}; use --domain` : 'a task needs a domain: --domain D (or --cwd PATH)');
-    const due = str(flags.due) !== undefined ? date(/** @type {string} */ (str(flags.due))) : null;
-    const repeat = str(flags.repeat) ? rule(/** @type {string} */ (str(flags.repeat)), due ?? ctx.today) : null;
+    const due = str(opts.due) !== undefined ? date(/** @type {string} */ (str(opts.due))) : null;
+    const repeat = str(opts.repeat) ? rule(/** @type {string} */ (str(opts.repeat)), due ?? ctx.today) : null;
     const t = tasks.newTask({
       title, domain: /** @type {string} */ (scope.id), due: repeat && !due ? tasks.firstDue(repeat, ctx.today) : due,
-      repeat, ongoing: orNull(str(flags.ongoing)), notes: orNull(str(flags.notes)),
+      repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)),
     }, ctx.now);
-    id = t.id;
+    return { t, focus: !!opts.focus };
+  };
+
+  if (sub === 'add') {
+    /** @type {{ t: Task, focus: boolean }[]} */
+    let items;
+    if (flags.stdin) {
+      // One task per line; the options of the command apply to every line (a line's own domain or folder wins).
+      const { stdin: _stdin, ...defaults } = flags;
+      const lines = readFileSync(0, 'utf8').split('\n').map((l) => l.trim());
+      items = lines.flatMap((line, i) => {
+        if (!line || line.startsWith('#')) return [];
+        failContext = `line ${i + 1}: `;
+        const { pos, flags: own } = parse(splitArgs(line));
+        const base = own.domain || own.cwd ? { ...defaults, domain: undefined, cwd: undefined } : defaults;
+        const item = newOne(pos, /** @type {Record<string, string | true>} */ ({ ...base, ...own }));
+        failContext = '';
+        return [item];
+      });
+      if (!items.length) fail('no tasks on stdin (one per line: "title" --domain D --due DATE …)');
+    } else {
+      items = [newOne(rest, flags)];
+    }
+    ids = items.map((x) => x.t.id);
     build = (fresh) => {
-      if (flags.focus && !tasks.canFocus(fresh, t.id)) focusFull(fresh);
-      return { tasks: [{ type: 'add', task: t }, ...(flags.focus ? [{ type: /** @type {const} */ ('focus'), id: t.id, focus: true }] : [])] };
+      /** @type {import('../lib/tasks.js').Op[]} */
+      const ops = [];
+      for (const { t, focus } of items) {
+        ops.push({ type: 'add', task: t });
+        if (!focus) continue;
+        if (!tasks.canFocus(tasks.applyOps(fresh, ops), t.id)) focusFull(fresh);
+        ops.push({ type: 'focus', id: t.id, focus: true });
+      }
+      return { tasks: ops };
     };
   } else {
     const t = findTask(ctx.tasks, rest[0], sub === 'undo' || sub === 'delete');
     const tid = t.id;
-    id = tid;
+    ids = [tid];
     /** @param {TasksDoc} fresh */
     const live = (fresh) => fresh.tasks.find((x) => x.id === tid) ?? fail('the task no longer exists');
     switch (sub) {
@@ -521,12 +593,14 @@ function task(ctx, sub, rest, flags) {
   report(res, ctx.sync);
   if (!res.message) return;
   const fresh = tasks.normalize(readJson(ctx.cfg, ctx.cfg.tasks));
-  const saved = fresh.tasks.find((x) => x.id === id);
-  if (!saved) return;
-  const view = { ...ctx, tasks: fresh, goals: normalize(readJsonIfExists(ctx.cfg, ctx.cfg.goals) ?? emptyDoc()) };
-  console.log(taskLine(saved, view));
-  const next = saved.next ? fresh.tasks.find((x) => x.id === saved.next) : undefined;
-  if (next) console.log(`next: ${taskLine(next, view)}`);
+  const view = { ...ctx, tasks: fresh };
+  for (const id of ids) {
+    const saved = fresh.tasks.find((x) => x.id === id);
+    if (!saved) continue;
+    console.log(taskLine(saved, view));
+    const next = saved.next ? fresh.tasks.find((x) => x.id === saved.next) : undefined;
+    if (next) console.log(`next: ${taskLine(next, view)}`);
+  }
 }
 
 /**

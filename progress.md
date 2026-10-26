@@ -1,11 +1,11 @@
 # Progress — compass
 
 ## Current status
-- Version 2.3 (phase 3 in progress): the app is a dashboard with Home (one card per area), Today (overdue, today
+- Version 2.4 (phase 3 in progress): the app is a dashboard with Home (one card per area), Today (overdue, today
   and the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and separate
   Tasks and Goals blocks) and a quick task sheet; split into `app/core/`, `app/modules/` (tasks, goals) and
   `app/views/`. Tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags.
-  Goals no longer repeat (habits will be a module of their own) and keep one progress number; tasks do not link to goals. 48 tests.
+  Goals no longer repeat (habits will be a module of their own) and keep one progress number; tasks do not link to goals; `task add --stdin` adds several in one commit. 49 tests.
 - Next (rest of phase 3): offline editing (local queue; offline is read-only today), managing areas from the app
   (create, rename, reorder), choosing modules per area in `domains.json`; CLI: `domain add` keeps only the last
   `--path`, and `task add/edit --location`. Deferred: day close and Focus in the app (the CLI still supports focus).
@@ -13,6 +13,9 @@
 - Later phases: 4 journal and books · 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
 
 ## Sessions (most recent first)
+- 2026-10-26 · v2.4: `compass task add --stdin`: one task per line with the same options as `task add` (shell-style
+  quotes; `#` comments), the command's own options apply to every line (a line's `--domain`/`--cwd` wins); every line
+  is checked before writing and all go in one commit (an error names the line and writes nothing). 49 tests.
 - 2026-10-26 · v2.3: tasks no longer link to a goal (it added 1 to the goal when completed): no `goal` field
   (`normalize` drops it), no "Counts towards a goal" in the sheet, no `--goal` in the CLI, and task commands only
   write `tasks.json` (and its archives). 48 tests.

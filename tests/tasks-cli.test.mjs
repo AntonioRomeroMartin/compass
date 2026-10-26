@@ -79,6 +79,28 @@ test('a repeating task creates its next occurrence when done or dropped', () => 
   assert.deepEqual(read('a', 'tasks.json').tasks.map((/** @type {any} */ t) => t.status), ['done', 'dropped', 'open']);
 });
 
+test('task add --stdin: several tasks in one commit, with shared and per-line options', () => {
+  const { dir, runInput, read } = setupWithDomains();
+  const input = [
+    '"Pay the \\"fee\\"" --due 2026-11-02',
+    '# a comment, and an empty line',
+    '',
+    "'Book the room' --domain sport --notes 'by phone'",
+  ].join('\n');
+  const res = runInput(input, 'task', 'add', '--stdin', '--domain', 'studies/course-a');
+  assert.equal(res.status, 0, res.stderr);
+  const list = read('a', 'tasks.json').tasks;
+  assert.deepEqual(list.map((/** @type {any} */ t) => [t.title, t.domain, t.due, t.notes]),
+    [['Pay the "fee"', 'studies/course-a', '2026-11-02', null], ['Book the room', 'sport', null, 'by phone']]);
+  assert.equal(git(join(dir, 'a'), 'rev-list', '--count', 'HEAD').trim(), '3'); // init, domains and one commit for both
+  assert.match(res.stdout, /Pay the "fee"[\s\S]*Book the room/);
+  // One bad line: nothing is written, and the error names the line.
+  const bad = runInput('"Fine" --domain sport\n"Wrong" --due someday', 'task', 'add', '--stdin', '--domain', 'sport');
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /^error: line 2: /);
+  assert.equal(read('a', 'tasks.json').tasks.length, 2);
+});
+
 test('no more than 3 tasks with focus', () => {
   const { runAll, read } = setupWithDomains();
   for (const t of ['One', 'Two', 'Three']) assert.equal(runAll('task', 'add', t, '--domain', 'sport', '--focus').status, 0);

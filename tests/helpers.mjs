@@ -33,8 +33,10 @@ export function setup(files = { 'goals.json': { version: 1, timeZone: 'UTC', cat
   /** @param {...string} args */
   const run = (...args) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', env: { ...process.env, COMPASS_CONFIG: config } });
   /** Like run, but also returns stderr (and does not throw). @param {...string} args */
-  const runAll = (...args) => {
-    const res = spawnSync('node', [CLI, ...args], { encoding: 'utf8', env: { ...process.env, COMPASS_CONFIG: config } });
+  const runAll = (...args) => runInput('', ...args);
+  /** Like runAll, with `input` on stdin. @param {string} input @param {...string} args */
+  const runInput = (input, ...args) => {
+    const res = spawnSync('node', [CLI, ...args], { input, encoding: 'utf8', env: { ...process.env, COMPASS_CONFIG: config } });
     return { status: res.status, stdout: res.stdout, stderr: res.stderr };
   };
   /** @param {string} clone @param {string} [file] */
@@ -42,5 +44,5 @@ export function setup(files = { 'goals.json': { version: 1, timeZone: 'UTC', cat
     const path = join(dir, clone, file);
     return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null;
   };
-  return { dir, run, runAll, read };
+  return { dir, run, runAll, runInput, read };
 }

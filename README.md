@@ -106,6 +106,8 @@ echo '{ "repo": "/path/to/your/data-repo", "goals": "goals.json", "tasks": "task
 compass domain add studies --name Studies --path ~/projects/studies
 compass task add "Problem set 3" --domain studies --due fri
 compass task add "Water plants" --domain home --repeat "every 3 days"
+printf '%s\n' '"Pay the fee" --due +3' '"Book a room" --domain home' \
+  | compass task add --stdin --domain studies   # several tasks, one commit; options here apply to every line
 compass task done "problem set"       # a task by id or part of its title
 compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none
 compass tasks --due week              # also: --domain D, --cwd PATH, --due today|overdue, --all
