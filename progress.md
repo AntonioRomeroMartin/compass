@@ -1,13 +1,24 @@
 # Progress — compass
 
 ## Current status
-- Version 1.9 (phase 2): tasks (`lib/tasks.js`), domains (`lib/domains.js`) and the Today view (`lib/today.js`) in
-  `lib/`; the CLI handles tasks, domains and a full `compass today`. The app is unchanged (tasks UI = phase 3).
-- Next: phase 3, the tasks UI in the app (Today grouped by domain with Focus on top, day close asking for each
-  open task: tomorrow / another day / drop), reusing `lib/today.js` and `lib/tasks.js`. Later: move closed tasks
-  to yearly files (e.g. `tasks/2026.json`) before `tasks.json` grows near the 1 MB limit of the contents API.
+- Version 2.0 (phase 3 in progress): the app is a dashboard with Home (one card per area), Today (overdue, today
+  and the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and separate
+  Tasks and Goals blocks) and a quick task sheet; split into `app/core/`, `app/modules/` (tasks, goals) and
+  `app/views/`. Tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags. 50 tests.
+- Next (rest of phase 3): offline editing (local queue; offline is read-only today), managing areas from the app
+  (create, rename, reorder), choosing modules per area in `domains.json`; CLI: `domain add` keeps only the last
+  `--path`, and `task add/edit --location`. Deferred: day close and Focus in the app (the CLI still supports focus).
+- Later phases: 4 journal and books · 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
 
 ## Sessions (most recent first)
+- 2026-10-23 · v2.0, phase 3 (app): app shell with tabs on the phone (Home · Today · Areas · + · Goals, More behind a
+  gear) and a sidebar on wide screens (foldable areas tree, New at the bottom); Home cards per area (open, overdue,
+  today, done in 7 days, next 3, goal bars); Today over the next 7 days instead of the rest of the ISO week; area
+  pages with separate Tasks and Goals blocks (goal categories are the areas); task sheet (title, area and date chips,
+  repeat, notes, subtasks, goal link under "More options"); light/dark switch; refresh every minute; module
+  architecture (`areaSections`, `homeCard`, registry in `app/modules/index.js`). CLI: `task delete <task> --yes`;
+  yearly archive of closed tasks (`compass tasks --archived`). App: conditional reads (ETag, 304 = nothing
+  downloaded); a new device suggests the site's owner and default data path. `sw.js` v8.
 - 2026-10-23 · v1.9, phase 2: `lib/domains.js` (registry `{id, name, parent?, paths?, color?}`, hierarchical ids,
   folder → domain by longest path, scope = domain + subdomains + dated items of parents; goal categories = domain
   id or name), `lib/tasks.js` (tasks with domain, due, notes, subtasks, repeat, focus ≤ 3, goal link, ongoing;
