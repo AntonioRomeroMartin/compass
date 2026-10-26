@@ -33,7 +33,7 @@ Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.j
   "categories": ["…"],
   "goals": [{ "id": "…", "kind": "goal", "title": "…", "category": "…",
               "horizon": "day|week|month|quarter|year|deadline", "target": 3, "unit": "…",
-              "deadline": null, "repeat": false, "period": "2026-W40",
+              "deadline": null, "period": "2026-W40",
               "progress": { "2026-W40": 2 }, "createdAt": "…", "repo": null, "archived": false,
               "subgoals": [{ "id": "…", "title": "…", "done": ["2026-W40"] }] }]
 }
@@ -41,11 +41,8 @@ Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.j
 
 Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`, `once`) are computed in the file's `timeZone`.
 
-- **One-off goals** (`repeat: false`, the default): the horizon is when the goal expires. A weekly goal created now belongs to the current week (`period`), and when the week ends it moves to **Past** as completed or missed.
-- **Habits** (`repeat: true`): the goal renews every period and progress starts again from 0; history is kept per period.
-  The card shows the streak (periods in a row with the target met; the current one does not break it while it is open)
-  and the last periods; tapping them opens the history of the last months with the current and best streak.
-- **Sub-goals** (optional): steps towards a goal, ticked off on its card. `done` lists the period keys in which each one was completed, so a habit's sub-goals start unticked every period.
+- **Goals** belong to one period: the horizon is when the goal expires. A weekly goal created now belongs to the current week (`period`), and when the week ends it moves to **Past** as completed or missed. Goals do not repeat.
+- **Sub-goals** (optional): steps towards a goal, ticked off on its card. `done` lists the period key in which each one was completed.
 - **With deadline**: accumulates under `once` and moves to Past the day after `deadline`.
 
 ### Domains (`domains.json`)
@@ -128,7 +125,7 @@ Studies › Course A [studies/course-a]
   ↳ ongoing [t_…] Thesis draft → notes/thesis.md
 Studies [studies] · parent, dated only
   · [t_…] Exam registration — due 2026-10-25 (in 2 d)
-  · [g_…] Study sessions — 2/5 · week · habit · studies
+  · [g_…] Study sessions — 2/5 · week · studies
 ```
 
 It shows the focus tasks, then by domain: tasks that are late, due today or in the next 7 days (tasks without a date only

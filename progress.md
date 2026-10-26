@@ -5,19 +5,19 @@
   and the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and separate
   Tasks and Goals blocks) and a quick task sheet; split into `app/core/`, `app/modules/` (tasks, goals) and
   `app/views/`. Tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags.
-  Habits show their streak and history (2026-10-26). 52 tests.
+  Goals no longer repeat: habits will be a module of their own. 49 tests.
 - Next (rest of phase 3): offline editing (local queue; offline is read-only today), managing areas from the app
   (create, rename, reorder), choosing modules per area in `domains.json`; CLI: `domain add` keeps only the last
   `--path`, and `task add/edit --location`. Deferred: day close and Focus in the app (the CLI still supports focus).
+- Habits: a module of their own (to design), not repeating goals.
 - Later phases: 4 journal and books · 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
 
 ## Sessions (most recent first)
-- 2026-10-26 · v2.1: habit streaks. `lib/goals.js`: `streak` (current and best: periods in a row with `isDone`; the
-  open period never breaks it; keys of another horizon or in the future are ignored), `history` (last n periods) and
-  `isHabit`; `periodStart` in `lib/period.js`. App: "🔥 N" chip on habit cards and Today/area rows, a row of squares
-  with the last periods on the card (met, some progress, nothing; current outlined), and tapping it opens a sheet
-  with current/best streak, periods met and the last 26 weeks as a calendar (daily) or the last periods (others).
-  CLI: `streak N (best M)` in goal lines. 52 tests.
+- 2026-10-26 · v2.1: goals no longer repeat (habits will be a module of their own). Every goal belongs to one period
+  (or has a deadline) and moves to Past when it ends; `normalize` drops `repeat` and gives an old repeating goal
+  the period in which it was created. The goal form loses the Repeat checkbox (horizons read Today, This week…);
+  the CLI loses `goal add --repeat`. Home cards no longer show tasks done in the last 7 days. The habit streaks
+  added earlier the same day were reverted.
 - 2026-10-23 · v2.0, phase 3 (app): app shell with tabs on the phone (Home · Today · Areas · + · Goals, More behind a
   gear) and a sidebar on wide screens (foldable areas tree, New at the bottom); Home cards per area (open, overdue,
   today, done in 7 days, next 3, goal bars); Today over the next 7 days instead of the rest of the ISO week; area

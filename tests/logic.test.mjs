@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { periodKey, periodKeys, daysUntil, civilDate, isValidTimeZone } from '../lib/period.js';
-import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, history, isDone, isExpired, normalize, serialize, streak, subgoalsDone } from '../lib/goals.js';
+import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, normalize, serialize, subgoalsDone } from '../lib/goals.js';
 import { encodeBase64, decodeBase64 } from '../lib/github.js';
 
 const UTC = 'UTC';
@@ -145,44 +145,8 @@ test('base64 with accents and emojis', () => {
   assert.equal(encodeBase64('ñ'), Buffer.from('ñ').toString('base64'));
 });
 
-test('habit (repeat): uses the current period and never expires', () => {
-  const g = goal('h', { repeat: true, progress: { '2026-W40': 4 } });
-  const mon = new Date('2026-09-28T12:00:00Z');
-  const nextMon = new Date('2026-10-05T12:00:00Z');
-  assert.equal(goalKey(g, mon, UTC), '2026-W40');
-  assert.ok(isDone(g, goalKey(g, mon, UTC)));
-  assert.equal(goalKey(g, nextMon, UTC), '2026-W41'); // resets: 0 / 4
-  assert.ok(!isDone(g, goalKey(g, nextMon, UTC)));
-  assert.ok(!isExpired(g, nextMon, UTC));
-});
-
-test('streaks: periods in a row with the target met; the open period does not break it', () => {
-  const thu = new Date('2026-10-15T12:00:00Z'); // 2026-W42
-  const g = goal('s', { repeat: true, target: 2, createdAt: '2026-09-01T10:00:00Z', progress: {
-    '2026-W36': 2, '2026-W37': 3, '2026-W38': 2, '2026-W39': 1, '2026-W40': 2, '2026-W41': 2,
-  } });
-  assert.deepEqual(streak(g, thu, UTC), { current: 2, best: 3 }); // W42 still open: 0 / 2
-  assert.deepEqual(streak({ ...g, progress: { ...g.progress, '2026-W42': 2 } }, thu, UTC), { current: 3, best: 3 });
-  // A missed past week breaks it; keys of another horizon and future ones are ignored.
-  const broken = { ...g, progress: { '2026-W40': 2, '2026-10-01': 5, '2027-W01': 2 } };
-  assert.deepEqual(streak(broken, thu, UTC), { current: 0, best: 1 });
-  // Daily, no target: any progress counts; one-offs have no streak.
-  const daily = goal('d', { repeat: true, horizon: 'day', target: null, createdAt: '2026-10-10T08:00:00Z',
-    progress: { '2026-10-12': 1, '2026-10-13': 1, '2026-10-14': 1 } });
-  assert.deepEqual(streak(daily, thu, UTC), { current: 3, best: 3 });
-  assert.deepEqual(streak(goal('o', { repeat: false, period: '2026-W42' }), thu, UTC), { current: 0, best: 0 });
-});
-
-test('history: last periods of a habit, oldest first, ending in the current one', () => {
-  const g = goal('h', { repeat: true, horizon: 'month', target: null, progress: { '2026-08': 1, '2026-10': 1 } });
-  const h = history(g, 3, new Date('2026-10-26T12:00:00Z'), UTC);
-  assert.deepEqual(h.map((p) => [p.key, p.start, p.done]), [['2026-08', '2026-08-01', true], ['2026-09', '2026-09-01', false], ['2026-10', '2026-10-01', true]]);
-  assert.deepEqual(history(goal('w', { repeat: true }), 2, new Date('2026-01-01T12:00:00Z'), UTC).map((p) => p.key), ['2025-W52', '2026-W01']);
-  assert.deepEqual(history(goal('q', { repeat: true, horizon: 'quarter' }), 2, new Date('2026-02-01T12:00:00Z'), UTC).map((p) => p.key), ['2025-Q4', '2026-Q1']);
-});
-
-test('one-off: stays in its period and expires when it ends', () => {
-  const g = goal('o', { repeat: false, period: '2026-W40', progress: { '2026-W40': 2 } });
+test('a goal stays in its period and expires when it ends', () => {
+  const g = goal('o', { period: '2026-W40', progress: { '2026-W40': 2 } });
   const sunday = new Date('2026-10-04T23:00:00Z');
   const monday = new Date('2026-10-05T00:30:00Z');
   assert.ok(!isExpired(g, sunday, UTC));
@@ -193,17 +157,16 @@ test('one-off: stays in its period and expires when it ends', () => {
 });
 
 test('deadline: expires the day after the date', () => {
-  const g = goal('d', { horizon: 'deadline', deadline: '2026-10-09', repeat: false, target: null });
+  const g = goal('d', { horizon: 'deadline', deadline: '2026-10-09', target: null });
   assert.equal(goalKey(g, new Date('2026-10-01T00:00:00Z'), UTC), 'once');
   assert.ok(!isExpired(g, new Date('2026-10-09T23:59:00Z'), UTC));
   assert.ok(isExpired(g, new Date('2026-10-10T00:01:00Z'), UTC));
 });
 
-test('compatibility: goals without repeat', () => {
-  const doc = normalize({ goals: [goal('a'), goal('b', { period: '2026-W40' }), goal('c', { horizon: 'deadline', repeat: true })] });
-  assert.equal(doc.goals[0].repeat, true); // no period: habit, as before
-  assert.equal(doc.goals[1].repeat, false); // with period: one-off
-  assert.equal(doc.goals[2].repeat, false); // deadline never repeats
+test('compatibility: old repeating goals belong to the period in which they were created', () => {
+  const doc = normalize({ timeZone: UTC, goals: [goal('a', { repeat: true }), goal('b', { repeat: false, period: '2026-W41' }), goal('c', { horizon: 'deadline', repeat: true })] });
+  assert.deepEqual(doc.goals.map((g) => [g.period, 'repeat' in g]), [['2026-W40', false], ['2026-W41', false], [null, false]]);
+  assert.ok(isExpired(doc.goals[0], new Date('2026-10-05T12:00:00Z'), UTC));
 });
 
 test('location and notes: saved, edited and removed', () => {
@@ -218,7 +181,7 @@ test('location and notes: saved, edited and removed', () => {
 
 test('sub-goals: add, tick per period, rename and remove', () => {
   const sub = (id, title) => ({ id, title, done: [] });
-  let doc = applyOps(emptyDoc(UTC), [{ type: 'add', goal: goal('g1', { repeat: true, subgoals: [sub('s1', 'Paso 1')] }) }]);
+  let doc = applyOps(emptyDoc(UTC), [{ type: 'add', goal: goal('g1', { subgoals: [sub('s1', 'Paso 1')] }) }]);
   doc = applyOps(doc, [
     { type: 'addSub', id: 'g1', sub: sub('s2', 'Paso 2') },
     { type: 'addSub', id: 'g1', sub: sub('s2', 'Duplicate') }, // same id: ignored
@@ -230,7 +193,6 @@ test('sub-goals: add, tick per period, rename and remove', () => {
   const g = doc.goals[0];
   assert.deepEqual(g.subgoals?.map((s) => s.title), ['Paso 1', 'Paso dos']);
   assert.equal(subgoalsDone(g, '2026-W40'), 1);
-  assert.equal(subgoalsDone(g, '2026-W41'), 0); // habit: the next week starts unticked
   doc = applyOps(doc, [{ type: 'toggleSub', id: 'g1', subId: 's1', key: '2026-W40', done: false }]);
   assert.equal(subgoalsDone(doc.goals[0], '2026-W40'), 0);
   doc = applyOps(doc, [{ type: 'removeSub', id: 'g1', subId: 's1' }, { type: 'removeSub', id: 'g1', subId: 's2' }]);

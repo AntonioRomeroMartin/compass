@@ -17,7 +17,7 @@ import * as goals from './goals/view.js';
 /**
  * A module's part of an area card on Home: a few figures and a few lines.
  * @typedef {Object} HomeCard
- * @property {[string, number|string, ('warn'|'danger'|'ok')?][]} stats  label, value, tone
+ * @property {[string, number|string, ('warn'|'danger')?][]} stats  label, value, tone
  * @property {HTMLElement[]} body
  */
 

@@ -3,8 +3,8 @@
 import * as domainsLib from '../../../lib/domains.js';
 import { areaIds, canEdit, current, dispatchGoals, domainsStore, goalsStore, inAreas, state, tz } from '../../core/data.js';
 import { $, editRow, fmt, h } from '../../core/ui.js';
-import { categoryUsage, goalKey, history, isDone, isExpired, isHabit, newId, streak, subgoalsDone } from '../../../lib/goals.js';
-import { HORIZONS, daysUntil, deviceTimeZone, isoWeekday, isValidTimeZone, periodKey } from '../../../lib/period.js';
+import { categoryUsage, goalKey, isDone, isExpired, newId, subgoalsDone } from '../../../lib/goals.js';
+import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey } from '../../../lib/period.js';
 
 /** @typedef {import('../../../lib/goals.js').Goal} Goal */
 /** @typedef {import('../../../lib/goals.js').Op} Op */
@@ -77,7 +77,6 @@ export function goalRow(g) {
     h(
       'span',
       { class: 'task-meta' },
-      streakChip(g),
       h('span', { class: 'chip muted' }, `${fmt(value)}${target ? ` / ${fmt(target)}` : ''}${g.unit ? ` ${g.unit}` : ''}`),
       h('button', {
         class: 'round small', 'aria-label': `Add 1 to ${g.title}`, disabled: !canEdit(),
@@ -123,7 +122,7 @@ export function renderList() {
     const msg = state.scope === 'archived'
       ? 'No archived goals.'
       : state.scope === 'past'
-        ? 'No past goals yet. One-off goals move here when their period or deadline ends.'
+        ? 'No past goals yet. Goals move here when their period or deadline ends.'
         : doc.goals.length ? 'No goals here yet.' : 'You have no goals yet. Create your first one with “+ New”.';
     main.append(h('p', { class: 'empty' }, msg));
     return;
@@ -174,7 +173,7 @@ export function card(g, now) {
   const editable = canEdit() && !g.archived && !expired;
   const target = g.target && g.target > 0 ? g.target : null;
   const done = isDone(g, key);
-  const when = g.horizon === 'deadline' ? 'Deadline' : g.repeat || expired ? HORIZON_SHORT[g.horizon] : HORIZON_LABEL[g.horizon];
+  const when = g.horizon === 'deadline' ? 'Deadline' : expired ? HORIZON_SHORT[g.horizon] : HORIZON_LABEL[g.horizon];
 
   const chips = h(
     'div',
@@ -183,8 +182,6 @@ export function card(g, now) {
     // Past and archived: single list, both are shown.
     state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, categoryLabel(g.category)) : null,
     state.scope !== 'active' || state.view === 'category' ? h('span', { class: 'chip muted' }, when) : null,
-    g.repeat && state.scope === 'active' ? h('span', { class: 'chip muted' }, '↻ Repeats') : null,
-    g.repeat && state.scope === 'active' ? streakChip(g) : null,
     expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : key) : null,
     expired ? h('span', { class: done ? 'chip' : 'chip danger' }, done ? '✓ Completed' : '✗ Missed') : null,
     g.horizon === 'deadline' && g.deadline && !expired ? deadlineChip(g.deadline, now) : null,
@@ -249,71 +246,10 @@ export function card(g, now) {
     g.notes ? h('p', { class: 'notes' }, g.notes) : null,
     g.subgoals?.length ? subgoalList(g, key, editable) : null,
     progress,
-    isHabit(g) && !g.archived ? recentDots(g, now) : null,
   );
 }
 
-// ---------------------------------------------------------------- habit streaks
-
-/** How many recent periods the card shows, and how many the history sheet shows. */
-const RECENT = { day: 14, week: 10, month: 12, quarter: 8, year: 6 };
-const LONG = { day: 0, week: 26, month: 24, quarter: 12, year: 10 };
-const PERIOD_WORD = { day: 'day', week: 'week', month: 'month', quarter: 'quarter', year: 'year' };
-
-/** "🔥 5" when a habit is on a streak. @param {Goal} g */
-function streakChip(g) {
-  if (!isHabit(g)) return null;
-  const { current } = streak(g, new Date(), tz());
-  return current > 0 ? h('span', { class: 'chip streak', title: `${current} ${PERIOD_WORD[/** @type {keyof RECENT} */ (g.horizon)]}s in a row` }, `🔥 ${current}`) : null;
-}
-
-/** One square per period: met, some progress, nothing; the current one is outlined. @param {{ key: string, value: number, done: boolean }} p @param {Goal} g @param {string} nowKey */
-function dot(p, g, nowKey) {
-  const cls = ['dot', p.done ? 'done' : p.value > 0 ? 'some' : '', p.key === nowKey ? 'now' : ''].filter(Boolean).join(' ');
-  const target = g.target && g.target > 0 ? ` / ${fmt(g.target)}` : '';
-  return h('span', { class: cls, title: `${p.key}: ${fmt(p.value)}${target}` });
-}
-
-/** Last periods of a habit on its card; tapping them opens the full history. @param {Goal} g @param {Date} now */
-function recentDots(g, now) {
-  const hz = /** @type {keyof RECENT} */ (g.horizon);
-  const nowKey = goalKey(g, now, tz());
-  return h(
-    'button',
-    { class: 'dots', type: 'button', 'aria-label': `History of ${g.title}`, onclick: () => openHistory(g) },
-    ...history(g, RECENT[hz], now, tz()).map((p) => dot(p, g, nowKey)),
-  );
-}
-
-/** Sheet with a habit's streaks and its last months (days in a calendar of weeks, Monday on top). @param {Goal} g */
-export function openHistory(g) {
-  const dialog = /** @type {HTMLDialogElement} */ ($('habit-dialog'));
-  const now = new Date();
-  const zone = tz();
-  const hz = /** @type {keyof RECENT} */ (g.horizon);
-  const nowKey = goalKey(g, now, zone);
-  const { current, best } = streak(g, now, zone);
-  const word = PERIOD_WORD[hz];
-  // Days: 26 full weeks up to today, so every column starts on a Monday.
-  const n = hz === 'day' ? 25 * 7 + isoWeekday(periodKey('day', now, zone)) : LONG[hz];
-  const periods = history(g, n, now, zone);
-  const met = periods.filter((p) => p.done).length;
-  $('habit-title').textContent = g.title;
-  $('habit-streaks').replaceChildren(
-    h('div', { class: 'stat' }, h('strong', {}, `🔥 ${current}`), h('span', {}, 'current streak')),
-    h('div', { class: 'stat' }, h('strong', {}, String(best)), h('span', {}, 'best streak')),
-    h('div', { class: 'stat' }, h('strong', {}, `${met}/${periods.length}`), h('span', {}, `${word}s met`)),
-  );
-  const grid = $('habit-grid');
-  grid.className = `history ${hz}`;
-  grid.replaceChildren(...periods.map((p) => dot(p, g, nowKey)));
-  $('habit-caption').textContent = hz === 'day'
-    ? `Last 26 weeks, ${periods[0].key} to today (one column per week, Monday on top).`
-    : `Last ${periods.length} ${word}s, ${periods[0].key} to ${periods[periods.length - 1].key}.`;
-  dialog.showModal();
-}
-
-/** Checkboxes of the sub-goals (in habits they are cleared when the period changes). @param {Goal} g @param {string} key @param {boolean} editable */
+/** Checkboxes of the sub-goals. @param {Goal} g @param {string} key @param {boolean} editable */
 export function subgoalList(g, key, editable) {
   const subs = g.subgoals ?? [];
   return h(
@@ -380,7 +316,6 @@ export function openGoalForm(goal, area = '') {
   f.target.value = goal?.target ?? '';
   f.unit.value = goal?.unit ?? '';
   f.deadline.value = goal?.deadline ?? '';
-  f.repeat.checked = !!goal?.repeat;
   f.repo.value = goal?.repo ?? '';
   f.location.value = goal?.location ?? '';
   f.notes.value = goal?.notes ?? '';
@@ -416,10 +351,9 @@ export function openGoalForm(goal, area = '') {
     const targetRaw = String(f.target.value).trim().replace(',', '.');
     const target = targetRaw === '' ? null : Number(targetRaw);
     const deadline = horizon === 'deadline' ? String(f.deadline.value) || null : null;
-    const repeat = horizon !== 'deadline' && !!f.repeat.checked;
-    // One-off: always the current period (kept when editing if the horizon does not change).
-    const keepPeriod = goal && !goal.repeat && goal.horizon === horizon && goal.period;
-    const period = repeat || horizon === 'deadline' ? null : keepPeriod || periodKey(horizon, new Date(), tz());
+    // Always the current period (kept when editing if the horizon does not change).
+    const keepPeriod = goal && goal.horizon === horizon && goal.period;
+    const period = horizon === 'deadline' ? null : keepPeriod || periodKey(horizon, new Date(), tz());
     if (!title) return f.title.focus();
     if (!category) return f.newCategory.focus();
     if (target !== null && (!Number.isFinite(target) || target <= 0)) return alert('The target must be a number greater than 0 (or leave it empty).');
@@ -431,7 +365,6 @@ export function openGoalForm(goal, area = '') {
       target,
       unit: target !== null ? String(f.unit.value).trim() || null : null,
       deadline,
-      repeat,
       period,
       repo: String(f.repo.value).trim() || null,
       location: String(f.location.value).trim() || null,
@@ -477,11 +410,8 @@ export function syncFormVisibility(form) {
   const f = /** @type {any} */ (form.elements);
   $('field-new-category').hidden = f.category.value !== NEW_CATEGORY;
   $('field-deadline').hidden = f.horizon.value !== 'deadline';
-  $('field-repeat').hidden = f.horizon.value === 'deadline';
   const hz = /** @type {Horizon} */ (f.horizon.value);
-  $('repeat-hint').textContent = hz === 'deadline' ? '' : f.repeat.checked
-    ? `Habit: renews every ${hz}.`
-    : `One-off: ends with ${HORIZON_LABEL[hz].toLowerCase()} (${periodKey(hz, new Date(), tz())}), then moves to Past.`;
+  $('horizon-hint').textContent = hz === 'deadline' ? '' : `Ends with ${HORIZON_LABEL[hz].toLowerCase()} (${periodKey(hz, new Date(), tz())}), then moves to Past.`;
   f.deadline.required = f.horizon.value === 'deadline';
 }
 

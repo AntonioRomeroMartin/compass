@@ -259,23 +259,19 @@ export function areaSections({ id, ids, showSub }) {
 }
 
 /**
- * Figures (open, late, today, done in 7 days) and the next three tasks by date.
+ * Figures (open, late, today) and the next three tasks by date.
  * @param {import('../index.js').AreaScope} scope
  * @returns {import('../index.js').HomeCard}
  */
 export function homeCard({ ids }) {
   const today = todayKey();
-  const all = tasksStore.current().tasks.filter((t) => inAreas(ids, t.domain));
-  const open = all.filter((t) => t.status === 'open').sort(tasksLib.byDue);
+  const open = tasksStore.current().tasks.filter((t) => t.status === 'open' && inAreas(ids, t.domain)).sort(tasksLib.byDue);
   const late = open.filter((t) => t.due && t.due < today).length;
   const dueToday = open.filter((t) => t.due === today).length;
-  const since = addDays(today, -7);
-  const done = all.filter((t) => t.status === 'done' && closedOn(t) >= since).length;
   /** @type {import('../index.js').HomeCard['stats']} */
   const stats = [['open', open.length]];
   if (late) stats.push(['late', late, 'danger']);
   if (dueToday) stats.push(['today', dueToday, 'warn']);
-  stats.push(['done 7d', done, 'ok']);
   const doms = domainsStore.current();
   const next = open.slice(0, 3).map((t) => {
     const d = t.due ? daysUntil(t.due, new Date(), tz()) : null;

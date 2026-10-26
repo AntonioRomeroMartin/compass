@@ -156,21 +156,18 @@
       </label>
       <label>Horizon
         <select name="horizon">
-          <option value="day">Daily</option>
-          <option value="week">Weekly</option>
-          <option value="month">Monthly</option>
-          <option value="quarter">Quarterly</option>
-          <option value="year">Yearly</option>
+          <option value="day">Today</option>
+          <option value="week">This week</option>
+          <option value="month">This month</option>
+          <option value="quarter">This quarter</option>
+          <option value="year">This year</option>
           <option value="deadline">With deadline</option>
         </select>
       </label>
       <label id="field-deadline" hidden>Deadline
         <input name="deadline" type="date">
       </label>
-      <div id="field-repeat" class="repeat">
-        <label class="check"><input type="checkbox" name="repeat"> Repeat every period</label>
-        <p id="repeat-hint" class="hint"></p>
-      </div>
+      <p id="horizon-hint" class="hint"></p>
       <div class="two">
         <label>Target (optional)
           <input name="target" inputmode="decimal" placeholder="e.g. 4" autocomplete="off">
@@ -199,17 +196,6 @@
         <button type="submit" class="btn primary">Save</button>
       </div>
     </form>
-  </dialog>
-
-  <dialog id="habit-dialog">
-    <div class="dialog-body">
-      <h2 id="habit-title"></h2>
-      <div id="habit-streaks" class="streaks"></div>
-      <div id="habit-grid" class="history"></div>
-      <p id="habit-caption" class="hint"></p>
-      <p class="legend hint"><span class="dot done"></span> met <span class="dot some"></span> some progress <span class="dot"></span> nothing <span class="dot now"></span> current</p>
-      <div class="actions"><div class="extra"></div><button type="button" class="btn primary" data-close>Done</button></div>
-    </div>
   </dialog>
 
   <dialog id="manage-dialog">

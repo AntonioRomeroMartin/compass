@@ -138,11 +138,7 @@ code { font-size: .9em; }
 .inline-form input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); }
 .toolbar .link { margin-left: auto; font-size: .9rem; }
 
-/* repeat and past */
-.repeat { display: grid; gap: 2px; }
-.repeat[hidden] { display: none; }
-dialog .repeat .check { display: inline-flex; color: var(--text); font-size: .95rem; }
-dialog .repeat input[type="checkbox"] { width: auto; }
+/* past */
 .result { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 dialog textarea { resize: vertical; min-height: 4.5em; }
 
@@ -276,7 +272,6 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 .stat b { color: var(--text); font-variant-numeric: tabular-nums; }
 .stat.warn b { color: var(--warn); }
 .stat.danger b { color: var(--danger); }
-.stat.ok b { color: var(--accent); }
 .mini-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .mini { display: flex; align-items: center; gap: 6px; font-size: .9rem; min-width: 0; }
 .mini-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -301,24 +296,3 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
   #open-more[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
 }
 @media (min-width: 900px) { .phone-only { display: none; } }
-
-/* habit streaks: one square per period (met, some progress, nothing; the current one outlined) */
-.chip.streak { background: var(--warn-soft); color: var(--warn); }
-.dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--border); vertical-align: middle; }
-.dot.some { background: color-mix(in srgb, var(--accent) 40%, var(--border)); }
-.dot.done { background: var(--accent); }
-.dot.now { outline: 2px solid var(--muted); outline-offset: 1px; }
-.dots { display: flex; gap: 5px; flex-wrap: wrap; background: none; border: 0; padding: 4px 0; cursor: pointer; }
-.streaks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.stat { display: grid; gap: 2px; text-align: center; padding: 10px 4px; border: 1px solid var(--border); border-radius: 12px; }
-.stat strong { font-size: 1.25rem; }
-.stat span { font-size: .78rem; color: var(--muted); }
-.history { display: grid; gap: 3px; }
-.history .dot { width: 100%; height: auto; aspect-ratio: 1; }
-.history.day { grid-template-rows: repeat(7, auto); grid-auto-flow: column; grid-auto-columns: 1fr; }
-.history.week { grid-template-columns: repeat(13, 1fr); }
-.history.month { grid-template-columns: repeat(12, 1fr); }
-.history.quarter { grid-template-columns: repeat(12, 1fr); }
-.history.year { grid-template-columns: repeat(10, 1fr); }
-.legend .dot { width: 10px; height: 10px; margin: 0 2px 0 8px; }
-.legend .dot:first-child { margin-left: 0; }

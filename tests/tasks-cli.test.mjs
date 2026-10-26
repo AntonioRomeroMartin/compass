@@ -58,7 +58,7 @@ test('domain is required and must be registered (by id, name or last segment)', 
 
 test('completing a task linked to a goal adds 1 to it, in the same commit', () => {
   const { dir, run, read } = setupWithDomains();
-  run('goal', 'add', '--title', 'Strength sessions', '--category', 'sport', '--horizon', 'week', '--target', '3', '--repeat');
+  run('goal', 'add', '--title', 'Strength sessions', '--category', 'sport', '--horizon', 'week', '--target', '3');
   run('task', 'add', 'Leg day', '--domain', 'sport', '--due', 'today', '--goal', 'strength');
   const out = run('task', 'done', 'leg');
   assert.match(out, /^tasks: done “Leg day” · goals: progress “Strength sessions”/);
@@ -144,7 +144,7 @@ test('today --cwd: the folder\'s domain, plus the dated items of its parent', ()
 
 test('if another device writes both files at the same time, everything is re-applied on top', () => {
   const { dir, run, read } = setupWithDomains();
-  run('goal', 'add', '--title', 'Strength sessions', '--category', 'sport', '--horizon', 'week', '--target', '3', '--repeat');
+  run('goal', 'add', '--title', 'Strength sessions', '--category', 'sport', '--horizon', 'week', '--target', '3');
   run('task', 'add', 'Leg day', '--domain', 'sport', '--goal', 'strength');
   // A pre-push hook simulates the other clone changing the goal and the task right before our push.
   const b = join(dir, 'b');

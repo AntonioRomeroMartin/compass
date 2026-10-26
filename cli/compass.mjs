@@ -7,7 +7,7 @@ import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
-import { applyOps, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, streak, subgoalsDone } from '../lib/goals.js';
+import { applyOps, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
 import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
 import { buildToday } from '../lib/today.js';
@@ -58,7 +58,7 @@ Usage:
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR] [--remove-path DIR]
   compass goals [--past|--archived|--all] [--category C]
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
-                   [--target N] [--unit U] [--deadline YYYY-MM-DD] [--repeat]
+                   [--target N] [--unit U] [--deadline YYYY-MM-DD]
                    [--notes T] [--location T] [--repo R]
   compass goal inc <goal> [delta]       add to the current period (default 1)
   compass goal set <goal> <value>
@@ -143,11 +143,9 @@ function goalLine(g, now, tz) {
   const progress = g.target ? `${fmt(value)}/${fmt(g.target)}${g.unit ? ` ${g.unit}` : ''}` : done ? 'done' : 'not done';
   const when = g.horizon === 'deadline'
     ? `due ${g.deadline} (${relDays(daysUntil(/** @type {string} */ (g.deadline), now, tz))})`
-    : `${g.horizon}${g.repeat ? ' · habit' : ''}`;
+    : g.horizon;
   const bits = [progress, when, g.category];
   if (g.subgoals?.length) bits.push(`sub ${subgoalsDone(g, key)}/${g.subgoals.length}`);
-  const { current, best } = streak(g, now, tz);
-  if (current || best) bits.push(`streak ${current} (best ${best})`);
   if (g.location) bits.push(`@ ${g.location}`);
   return `${done ? '✓' : '·'} [${g.id}] ${g.title} — ${bits.join(' · ')}`;
 }
@@ -682,7 +680,6 @@ function goal(ctx, sub, rest, flags) {
     const target = str(flags.target) ? positive(/** @type {string} */ (str(flags.target)), '--target') : null;
     const deadline = horizon === 'deadline' ? str(flags.deadline) ?? null : null;
     if (horizon === 'deadline' && !/^\d{4}-\d{2}-\d{2}$/.test(deadline ?? '')) fail('a deadline goal needs --deadline YYYY-MM-DD');
-    const repeat = horizon !== 'deadline' && !!flags.repeat;
     if (!doc.categories.includes(category)) console.error(`note: new category “${category}”`);
     if (ctx.domains.domains.length && !domains.domainOfCategory(ctx.domains, category)) {
       console.error(`note: “${category}” is not a registered domain (see compass domains)`);
@@ -690,8 +687,8 @@ function goal(ctx, sub, rest, flags) {
     /** @type {Goal} */
     const g = {
       id: newId(), kind: 'goal', title, category, horizon,
-      target, unit: target !== null ? str(flags.unit) ?? null : null, deadline, repeat,
-      period: repeat || horizon === 'deadline' ? null : periodKey(horizon, now, tz),
+      target, unit: target !== null ? str(flags.unit) ?? null : null, deadline,
+      period: horizon === 'deadline' ? null : periodKey(horizon, now, tz),
       repo: str(flags.repo) ?? null, location: str(flags.location) ?? null, notes: str(flags.notes) ?? null,
       progress: {}, createdAt: now.toISOString(),
     };
