@@ -3,8 +3,8 @@
 import * as domainsLib from '../../../lib/domains.js';
 import { areaIds, canEdit, current, dispatchGoals, domainsStore, goalsStore, inAreas, state, tz } from '../../core/data.js';
 import { $, editRow, fmt, h } from '../../core/ui.js';
-import { categoryUsage, goalKey, isDone, isExpired, newId, subgoalsDone } from '../../../lib/goals.js';
-import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey } from '../../../lib/period.js';
+import { categoryUsage, goalKey, history, isDone, isExpired, isHabit, newId, streak, subgoalsDone } from '../../../lib/goals.js';
+import { HORIZONS, daysUntil, deviceTimeZone, isoWeekday, isValidTimeZone, periodKey } from '../../../lib/period.js';
 
 /** @typedef {import('../../../lib/goals.js').Goal} Goal */
 /** @typedef {import('../../../lib/goals.js').Op} Op */
@@ -77,6 +77,7 @@ export function goalRow(g) {
     h(
       'span',
       { class: 'task-meta' },
+      streakChip(g),
       h('span', { class: 'chip muted' }, `${fmt(value)}${target ? ` / ${fmt(target)}` : ''}${g.unit ? ` ${g.unit}` : ''}`),
       h('button', {
         class: 'round small', 'aria-label': `Add 1 to ${g.title}`, disabled: !canEdit(),
@@ -183,6 +184,7 @@ export function card(g, now) {
     state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, categoryLabel(g.category)) : null,
     state.scope !== 'active' || state.view === 'category' ? h('span', { class: 'chip muted' }, when) : null,
     g.repeat && state.scope === 'active' ? h('span', { class: 'chip muted' }, '↻ Repeats') : null,
+    g.repeat && state.scope === 'active' ? streakChip(g) : null,
     expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : key) : null,
     expired ? h('span', { class: done ? 'chip' : 'chip danger' }, done ? '✓ Completed' : '✗ Missed') : null,
     g.horizon === 'deadline' && g.deadline && !expired ? deadlineChip(g.deadline, now) : null,
@@ -247,7 +249,68 @@ export function card(g, now) {
     g.notes ? h('p', { class: 'notes' }, g.notes) : null,
     g.subgoals?.length ? subgoalList(g, key, editable) : null,
     progress,
+    isHabit(g) && !g.archived ? recentDots(g, now) : null,
   );
+}
+
+// ---------------------------------------------------------------- habit streaks
+
+/** How many recent periods the card shows, and how many the history sheet shows. */
+const RECENT = { day: 14, week: 10, month: 12, quarter: 8, year: 6 };
+const LONG = { day: 0, week: 26, month: 24, quarter: 12, year: 10 };
+const PERIOD_WORD = { day: 'day', week: 'week', month: 'month', quarter: 'quarter', year: 'year' };
+
+/** "🔥 5" when a habit is on a streak. @param {Goal} g */
+function streakChip(g) {
+  if (!isHabit(g)) return null;
+  const { current } = streak(g, new Date(), tz());
+  return current > 0 ? h('span', { class: 'chip streak', title: `${current} ${PERIOD_WORD[/** @type {keyof RECENT} */ (g.horizon)]}s in a row` }, `🔥 ${current}`) : null;
+}
+
+/** One square per period: met, some progress, nothing; the current one is outlined. @param {{ key: string, value: number, done: boolean }} p @param {Goal} g @param {string} nowKey */
+function dot(p, g, nowKey) {
+  const cls = ['dot', p.done ? 'done' : p.value > 0 ? 'some' : '', p.key === nowKey ? 'now' : ''].filter(Boolean).join(' ');
+  const target = g.target && g.target > 0 ? ` / ${fmt(g.target)}` : '';
+  return h('span', { class: cls, title: `${p.key}: ${fmt(p.value)}${target}` });
+}
+
+/** Last periods of a habit on its card; tapping them opens the full history. @param {Goal} g @param {Date} now */
+function recentDots(g, now) {
+  const hz = /** @type {keyof RECENT} */ (g.horizon);
+  const nowKey = goalKey(g, now, tz());
+  return h(
+    'button',
+    { class: 'dots', type: 'button', 'aria-label': `History of ${g.title}`, onclick: () => openHistory(g) },
+    ...history(g, RECENT[hz], now, tz()).map((p) => dot(p, g, nowKey)),
+  );
+}
+
+/** Sheet with a habit's streaks and its last months (days in a calendar of weeks, Monday on top). @param {Goal} g */
+export function openHistory(g) {
+  const dialog = /** @type {HTMLDialogElement} */ ($('habit-dialog'));
+  const now = new Date();
+  const zone = tz();
+  const hz = /** @type {keyof RECENT} */ (g.horizon);
+  const nowKey = goalKey(g, now, zone);
+  const { current, best } = streak(g, now, zone);
+  const word = PERIOD_WORD[hz];
+  // Days: 26 full weeks up to today, so every column starts on a Monday.
+  const n = hz === 'day' ? 25 * 7 + isoWeekday(periodKey('day', now, zone)) : LONG[hz];
+  const periods = history(g, n, now, zone);
+  const met = periods.filter((p) => p.done).length;
+  $('habit-title').textContent = g.title;
+  $('habit-streaks').replaceChildren(
+    h('div', { class: 'stat' }, h('strong', {}, `🔥 ${current}`), h('span', {}, 'current streak')),
+    h('div', { class: 'stat' }, h('strong', {}, String(best)), h('span', {}, 'best streak')),
+    h('div', { class: 'stat' }, h('strong', {}, `${met}/${periods.length}`), h('span', {}, `${word}s met`)),
+  );
+  const grid = $('habit-grid');
+  grid.className = `history ${hz}`;
+  grid.replaceChildren(...periods.map((p) => dot(p, g, nowKey)));
+  $('habit-caption').textContent = hz === 'day'
+    ? `Last 26 weeks, ${periods[0].key} to today (one column per week, Monday on top).`
+    : `Last ${periods.length} ${word}s, ${periods[0].key} to ${periods[periods.length - 1].key}.`;
+  dialog.showModal();
 }
 
 /** Checkboxes of the sub-goals (in habits they are cleared when the period changes). @param {Goal} g @param {string} key @param {boolean} editable */

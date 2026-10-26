@@ -7,7 +7,7 @@ import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
-import { applyOps, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import { applyOps, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, streak, subgoalsDone } from '../lib/goals.js';
 import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
 import { buildToday } from '../lib/today.js';
@@ -146,6 +146,8 @@ function goalLine(g, now, tz) {
     : `${g.horizon}${g.repeat ? ' · habit' : ''}`;
   const bits = [progress, when, g.category];
   if (g.subgoals?.length) bits.push(`sub ${subgoalsDone(g, key)}/${g.subgoals.length}`);
+  const { current, best } = streak(g, now, tz);
+  if (current || best) bits.push(`streak ${current} (best ${best})`);
   if (g.location) bits.push(`@ ${g.location}`);
   return `${done ? '✓' : '·'} [${g.id}] ${g.title} — ${bits.join(' · ')}`;
 }

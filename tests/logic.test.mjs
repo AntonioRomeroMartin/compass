@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { periodKey, periodKeys, daysUntil, civilDate, isValidTimeZone } from '../lib/period.js';
-import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, history, isDone, isExpired, normalize, serialize, streak, subgoalsDone } from '../lib/goals.js';
 import { encodeBase64, decodeBase64 } from '../lib/github.js';
 
 const UTC = 'UTC';
@@ -154,6 +154,31 @@ test('habit (repeat): uses the current period and never expires', () => {
   assert.equal(goalKey(g, nextMon, UTC), '2026-W41'); // resets: 0 / 4
   assert.ok(!isDone(g, goalKey(g, nextMon, UTC)));
   assert.ok(!isExpired(g, nextMon, UTC));
+});
+
+test('streaks: periods in a row with the target met; the open period does not break it', () => {
+  const thu = new Date('2026-10-15T12:00:00Z'); // 2026-W42
+  const g = goal('s', { repeat: true, target: 2, createdAt: '2026-09-01T10:00:00Z', progress: {
+    '2026-W36': 2, '2026-W37': 3, '2026-W38': 2, '2026-W39': 1, '2026-W40': 2, '2026-W41': 2,
+  } });
+  assert.deepEqual(streak(g, thu, UTC), { current: 2, best: 3 }); // W42 still open: 0 / 2
+  assert.deepEqual(streak({ ...g, progress: { ...g.progress, '2026-W42': 2 } }, thu, UTC), { current: 3, best: 3 });
+  // A missed past week breaks it; keys of another horizon and future ones are ignored.
+  const broken = { ...g, progress: { '2026-W40': 2, '2026-10-01': 5, '2027-W01': 2 } };
+  assert.deepEqual(streak(broken, thu, UTC), { current: 0, best: 1 });
+  // Daily, no target: any progress counts; one-offs have no streak.
+  const daily = goal('d', { repeat: true, horizon: 'day', target: null, createdAt: '2026-10-10T08:00:00Z',
+    progress: { '2026-10-12': 1, '2026-10-13': 1, '2026-10-14': 1 } });
+  assert.deepEqual(streak(daily, thu, UTC), { current: 3, best: 3 });
+  assert.deepEqual(streak(goal('o', { repeat: false, period: '2026-W42' }), thu, UTC), { current: 0, best: 0 });
+});
+
+test('history: last periods of a habit, oldest first, ending in the current one', () => {
+  const g = goal('h', { repeat: true, horizon: 'month', target: null, progress: { '2026-08': 1, '2026-10': 1 } });
+  const h = history(g, 3, new Date('2026-10-26T12:00:00Z'), UTC);
+  assert.deepEqual(h.map((p) => [p.key, p.start, p.done]), [['2026-08', '2026-08-01', true], ['2026-09', '2026-09-01', false], ['2026-10', '2026-10-01', true]]);
+  assert.deepEqual(history(goal('w', { repeat: true }), 2, new Date('2026-01-01T12:00:00Z'), UTC).map((p) => p.key), ['2025-W52', '2026-W01']);
+  assert.deepEqual(history(goal('q', { repeat: true, horizon: 'quarter' }), 2, new Date('2026-02-01T12:00:00Z'), UTC).map((p) => p.key), ['2025-Q4', '2026-Q1']);
 });
 
 test('one-off: stays in its period and expires when it ends', () => {
