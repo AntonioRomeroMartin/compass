@@ -13,7 +13,7 @@ test('add, inc and done write with commit and push', () => {
   assert.match(out, /Strength sessions — 2\/4 · week · Sport/);
   git(join(dir, 'b'), 'pull', '-q');
   const doc = JSON.parse(readFileSync(join(dir, 'b', 'goals.json'), 'utf8'));
-  assert.equal(Object.values(doc.goals[0].progress)[0], 2);
+  assert.equal(doc.goals[0].progress, 2);
   assert.match(git(join(dir, 'b'), 'log', '-1', '--format=%s'), /^goals: progress “Strength sessions”/);
 });
 
@@ -36,7 +36,7 @@ exit 0
   git(b, 'pull', '-q');
   const doc = read('b');
   assert.equal(doc.goals[0].notes, 'from b');
-  assert.equal(Object.values(doc.goals[0].progress)[0], 1);
+  assert.equal(doc.goals[0].progress, 1);
 });
 
 test('ambiguous or missing references fail without writing', () => {
@@ -45,7 +45,7 @@ test('ambiguous or missing references fail without writing', () => {
   run('goal', 'add', '--title', 'Run 10k', '--category', 'Sport', '--horizon', 'month');
   assert.throws(() => run('goal', 'inc', 'run'), /several goals/);
   assert.throws(() => run('goal', 'inc', 'swim'), /no goal matches/);
-  assert.deepEqual(read('a').goals.map((/** @type {any} */ g) => g.progress), [{}, {}]);
+  assert.deepEqual(read('a').goals.map((/** @type {any} */ g) => g.progress), [0, 0]);
 });
 
 test('period gives the keys in the file\'s zone', () => {

@@ -7,7 +7,7 @@ import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
-import { applyOps, commitMessage, emptyDoc, goalKey, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import { applyOps, commitMessage, emptyDoc, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
 import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
 import { buildToday } from '../lib/today.js';
@@ -60,7 +60,7 @@ Usage:
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
                    [--target N] [--unit U] [--deadline YYYY-MM-DD]
                    [--notes T] [--location T] [--repo R]
-  compass goal inc <goal> [delta]       add to the current period (default 1)
+  compass goal inc <goal> [delta]       add to its progress (default 1)
   compass goal set <goal> <value>
   compass goal done <goal>              set to its target (or 1 without target)
   compass goal sub <goal> <sub-goal> [--undo]
@@ -137,15 +137,14 @@ const orNull = (v) => (v === undefined || ['', 'none', 'no'].includes(v.trim().t
  * @param {Goal} g @param {Date} now @param {string} tz
  */
 function goalLine(g, now, tz) {
-  const key = goalKey(g, now, tz);
-  const value = g.progress[key] ?? 0;
-  const done = isDone(g, key);
+  const value = g.progress;
+  const done = isDone(g);
   const progress = g.target ? `${fmt(value)}/${fmt(g.target)}${g.unit ? ` ${g.unit}` : ''}` : done ? 'done' : 'not done';
   const when = g.horizon === 'deadline'
     ? `due ${g.deadline} (${relDays(daysUntil(/** @type {string} */ (g.deadline), now, tz))})`
     : g.horizon;
   const bits = [progress, when, g.category];
-  if (g.subgoals?.length) bits.push(`sub ${subgoalsDone(g, key)}/${g.subgoals.length}`);
+  if (g.subgoals?.length) bits.push(`sub ${subgoalsDone(g)}/${g.subgoals.length}`);
   if (g.location) bits.push(`@ ${g.location}`);
   return `${done ? '✓' : '·'} [${g.id}] ${g.title} — ${bits.join(' · ')}`;
 }
@@ -421,7 +420,7 @@ function goalCredit(ctx, doc, id, delta) {
     console.error(`note: the linked goal ${id} is not active; its progress is not changed`);
     return [];
   }
-  return [{ type: 'inc', id, key: goalKey(g, ctx.now, ctx.gtz), delta }];
+  return [{ type: 'inc', id, delta }];
 }
 
 /**
@@ -690,7 +689,7 @@ function goal(ctx, sub, rest, flags) {
       target, unit: target !== null ? str(flags.unit) ?? null : null, deadline,
       period: horizon === 'deadline' ? null : periodKey(horizon, now, tz),
       repo: str(flags.repo) ?? null, location: str(flags.location) ?? null, notes: str(flags.notes) ?? null,
-      progress: {}, createdAt: now.toISOString(),
+      progress: 0, createdAt: now.toISOString(),
     };
     build = () => [{ type: 'add', goal: g }];
   } else {
@@ -706,19 +705,19 @@ function goal(ctx, sub, rest, flags) {
       case 'inc': {
         const delta = rest[1] === undefined ? 1 : Number(rest[1].replace(',', '.'));
         if (!Number.isFinite(delta) || delta === 0) fail('delta must be a non-zero number');
-        build = (fresh) => [{ type: 'inc', id, key: goalKey(live(fresh), now, tz), delta }];
+        build = (fresh) => (live(fresh), [{ type: 'inc', id, delta }]);
         break;
       }
       case 'set': {
         const value = Number(String(rest[1] ?? '').replace(',', '.'));
         if (rest[1] === undefined || !Number.isFinite(value) || value < 0) fail('goal set needs a value ≥ 0');
-        build = (fresh) => [{ type: 'set', id, key: goalKey(live(fresh), now, tz), value }];
+        build = (fresh) => (live(fresh), [{ type: 'set', id, value }]);
         break;
       }
       case 'done':
         build = (fresh) => {
           const cur = live(fresh);
-          return [{ type: 'set', id, key: goalKey(cur, now, tz), value: cur.target ?? 1 }];
+          return [{ type: 'set', id, value: cur.target ?? 1 }];
         };
         break;
       case 'sub': {
@@ -726,7 +725,7 @@ function goal(ctx, sub, rest, flags) {
         const matches = (g.subgoals ?? []).filter((s) => s.id === rest[1] || s.title.toLowerCase().includes(q));
         if (!q || matches.length !== 1) fail(matches.length ? 'that matches several sub-goals' : 'no sub-goal matches');
         const subId = matches[0].id;
-        build = (fresh) => [{ type: 'toggleSub', id, subId, key: goalKey(live(fresh), now, tz), done: !flags.undo }];
+        build = (fresh) => (live(fresh), [{ type: 'toggleSub', id, subId, done: !flags.undo }]);
         break;
       }
       case 'edit': {

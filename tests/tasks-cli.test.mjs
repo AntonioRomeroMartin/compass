@@ -66,12 +66,12 @@ test('completing a task linked to a goal adds 1 to it, in the same commit', () =
   git(b, 'pull', '-q');
   assert.equal(git(b, 'log', '-1', '--format=%s'), 'tasks: done “Leg day”\n');
   assert.deepEqual(git(b, 'show', '--name-only', '--format=', 'HEAD').trim().split('\n').sort(), ['goals.json', 'tasks.json']);
-  assert.deepEqual(Object.values(read('b').goals[0].progress), [1]);
+  assert.equal(read('b').goals[0].progress, 1);
   assert.equal(read('b', 'tasks.json').tasks[0].status, 'done');
   // Done twice: nothing changes. Undo: the goal loses that 1.
   assert.match(run('task', 'done', read('a', 'tasks.json').tasks[0].id), /^No change\./);
   assert.match(run('task', 'undo', 'leg'), /^tasks: reopened “Leg day” · goals: progress “Strength sessions”/);
-  assert.deepEqual(read('a').goals[0].progress, {});
+  assert.equal(read('a').goals[0].progress, 0);
   assert.equal(read('a', 'tasks.json').tasks[0].status, 'open');
 });
 
@@ -166,7 +166,7 @@ exit 0
   const goals = read('b');
   const list = read('b', 'tasks.json');
   assert.equal(goals.goals[0].notes, 'from b');
-  assert.deepEqual(Object.values(goals.goals[0].progress), [1]);
+  assert.equal(goals.goals[0].progress, 1);
   assert.equal(list.tasks[0].notes, 'from b too');
   assert.equal(list.tasks[0].status, 'done');
   assert.match(git(b, 'log', '-2', '--format=%s'), /^tasks: done “Leg day”\nrace\n$/);
@@ -206,7 +206,7 @@ test('today does not wait for a slow pull: it warns and uses the local copy', ()
 });
 
 test('domains: list, add and edit (domains.json is created on the first write)', () => {
-  const { dir, run, runAll, read } = setup({ 'goals.json': { ...GOALS, goals: [{ id: 'g1', kind: 'goal', title: 'Run', category: 'Sport', horizon: 'week', target: 1, progress: {} }] } });
+  const { dir, run, runAll, read } = setup({ 'goals.json': { ...GOALS, goals: [{ id: 'g1', kind: 'goal', title: 'Run', category: 'Sport', horizon: 'week', target: 1, progress: 0 }] } });
   assert.match(run('domains'), /No domains registered/);
   run('domain', 'add', 'studies', '--name', 'Studies', '--path', join(dir, 'work', 'studies'));
   assert.match(runAll('domain', 'add', 'studies/course-a/x').stderr, /parent “studies\/course-a” does not exist/);

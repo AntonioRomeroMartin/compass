@@ -248,9 +248,9 @@ test('today: focus, then by domain; a subdomain sees the dated items of its pare
     { type: 'focus', id: 'focusThere', focus: true },
   ]);
   const goalsDoc = goals.normalize({ timeZone: 'UTC', goals: [
-    { id: 'g1', kind: 'goal', title: 'Study hours', category: 'Studies', horizon: 'week', target: 10, progress: {}, period: '2026-W43' },
-    { id: 'g2', kind: 'goal', title: 'Runs', category: 'sport', horizon: 'week', target: 3, progress: {}, period: '2026-W43' },
-    { id: 'g3', kind: 'goal', title: 'Read', category: 'Reading', horizon: 'month', target: 1, progress: {}, period: '2026-10' },
+    { id: 'g1', kind: 'goal', title: 'Study hours', category: 'Studies', horizon: 'week', target: 10, progress: 0, period: '2026-W43' },
+    { id: 'g2', kind: 'goal', title: 'Runs', category: 'sport', horizon: 'week', target: 3, progress: 0, period: '2026-W43' },
+    { id: 'g3', kind: 'goal', title: 'Read', category: 'Reading', horizon: 'month', target: 1, progress: 0, period: '2026-10' },
   ] });
   const view = buildToday({ goals: goalsDoc, tasks: tasksDoc, domains: REGISTRY, now, tz: 'UTC', scope: 'studies/course-a' });
   assert.equal(view.date, FRI);

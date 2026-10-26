@@ -34,16 +34,17 @@ Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.j
   "goals": [{ "id": "…", "kind": "goal", "title": "…", "category": "…",
               "horizon": "day|week|month|quarter|year|deadline", "target": 3, "unit": "…",
               "deadline": null, "period": "2026-W40",
-              "progress": { "2026-W40": 2 }, "createdAt": "…", "repo": null, "archived": false,
-              "subgoals": [{ "id": "…", "title": "…", "done": ["2026-W40"] }] }]
+              "progress": 2, "createdAt": "…", "repo": null, "archived": false,
+              "subgoals": [{ "id": "…", "title": "…", "done": false }] }]
 }
 ```
 
-Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`, `once`) are computed in the file's `timeZone`.
+Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) are computed in the file's `timeZone`.
 
 - **Goals** belong to one period: the horizon is when the goal expires. A weekly goal created now belongs to the current week (`period`), and when the week ends it moves to **Past** as completed or missed. Goals do not repeat.
-- **Sub-goals** (optional): steps towards a goal, ticked off on its card. `done` lists the period key in which each one was completed.
-- **With deadline**: accumulates under `once` and moves to Past the day after `deadline`.
+- **Progress** is one number (`progress`); without a `target`, any progress means done.
+- **Sub-goals** (optional): steps towards a goal, ticked off on its card.
+- **With deadline**: no `period`; it moves to Past the day after `deadline`.
 
 ### Domains (`domains.json`)
 
@@ -87,7 +88,7 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`, `o
   `{"type": "monthly", "day": 1…31}` (past the end of a short month it falls on its last day). Closing a repeating
   task creates the next occurrence as a new task (the closed one keeps its id in `next`). The next date counts
   from the due date, or from today when the task was late, so a late completion does not pile up overdue copies.
-- `goal`: completing the task adds 1 to that goal in its current period, in the same commit; undoing it takes the 1 back.
+- `goal`: completing the task adds 1 to that goal, in the same commit; undoing it takes the 1 back.
 - `ongoing`: path of a text file with the state of work in progress; "today" lists these tasks even without a date.
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 

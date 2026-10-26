@@ -4,7 +4,7 @@ import * as tasksLib from '../../../lib/tasks.js';
 import * as domainsLib from '../../../lib/domains.js';
 import { canEdit, current, dispatchGoals, domainsStore, inAreas, tasksStore, todayKey, tz } from '../../core/data.js';
 import { $, chipPicker, editRow, h } from '../../core/ui.js';
-import { goalKey, isExpired, newId } from '../../../lib/goals.js';
+import { isExpired, newId } from '../../../lib/goals.js';
 import { addDays, daysUntil, endOfWeek, periodKey } from '../../../lib/period.js';
 
 /** @typedef {import('../../../lib/tasks.js').Task} Task */
@@ -20,7 +20,7 @@ export function toggleTask(t) {
   }
   // A task linked to a goal adds (or takes back) 1.
   const g = t.goal ? current().goals.find((x) => x.id === t.goal) : null;
-  if (g) dispatchGoals({ type: 'inc', id: g.id, key: goalKey(g, now, tz()), delta: t.status === 'open' ? 1 : -1 });
+  if (g) dispatchGoals({ type: 'inc', id: g.id, delta: t.status === 'open' ? 1 : -1 });
 }
 
 /** @param {Task} t @param {boolean} [showArea] @param {boolean} [short] area chip with the sub-area's name only (inside its parent's page) */

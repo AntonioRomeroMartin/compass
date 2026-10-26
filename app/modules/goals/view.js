@@ -3,7 +3,7 @@
 import * as domainsLib from '../../../lib/domains.js';
 import { areaIds, canEdit, current, dispatchGoals, domainsStore, goalsStore, inAreas, state, tz } from '../../core/data.js';
 import { $, editRow, fmt, h } from '../../core/ui.js';
-import { categoryUsage, goalKey, isDone, isExpired, newId, subgoalsDone } from '../../../lib/goals.js';
+import { categoryUsage, isDone, isExpired, newId, subgoalsDone } from '../../../lib/goals.js';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey } from '../../../lib/period.js';
 
 /** @typedef {import('../../../lib/goals.js').Goal} Goal */
@@ -65,10 +65,9 @@ export const HORIZON_SHORT = {
 
 /** Compact goal row for Today: title, progress and +1. @param {Goal} g */
 export function goalRow(g) {
-  const key = goalKey(g, new Date(), tz());
-  const value = g.progress[key] ?? 0;
+  const value = g.progress;
   const target = g.target && g.target > 0 ? g.target : null;
-  const done = isDone(g, key);
+  const done = isDone(g);
   return h(
     'li',
     { class: done ? 'task goal done' : 'task goal' },
@@ -80,7 +79,7 @@ export function goalRow(g) {
       h('span', { class: 'chip muted' }, `${fmt(value)}${target ? ` / ${fmt(target)}` : ''}${g.unit ? ` ${g.unit}` : ''}`),
       h('button', {
         class: 'round small', 'aria-label': `Add 1 to ${g.title}`, disabled: !canEdit(),
-        onclick: () => dispatchGoals(target ? { type: 'inc', id: g.id, key, delta: 1 } : { type: 'set', id: g.id, key, value: done ? 0 : 1 }),
+        onclick: () => dispatchGoals(target ? { type: 'inc', id: g.id, delta: 1 } : { type: 'set', id: g.id, value: done ? 0 : 1 }),
       }, target ? '+' : done ? '✓' : '○'),
     ),
   );
@@ -133,7 +132,7 @@ export function renderList() {
   if (state.scope === 'past') {
     const end = (/** @type {Goal} */ g) => (g.horizon === 'deadline' ? g.deadline ?? '' : g.createdAt);
     goals.sort((a, b) => end(b).localeCompare(end(a)));
-    const done = goals.filter((g) => isDone(g, goalKey(g, now, zone))).length;
+    const done = goals.filter((g) => isDone(g)).length;
     groups.push(['Past', `${done} of ${goals.length} completed (${Math.round((done / goals.length) * 100)}%)`, goals]);
   } else if (state.view === 'horizon') {
     for (const hz of HORIZONS) {
@@ -167,12 +166,11 @@ export function renderList() {
 /** @param {Goal} g @param {Date} now */
 export function card(g, now) {
   const zone = tz();
-  const key = goalKey(g, now, zone);
-  const value = g.progress[key] ?? 0;
+  const value = g.progress;
   const expired = isExpired(g, now, zone);
   const editable = canEdit() && !g.archived && !expired;
   const target = g.target && g.target > 0 ? g.target : null;
-  const done = isDone(g, key);
+  const done = isDone(g);
   const when = g.horizon === 'deadline' ? 'Deadline' : expired ? HORIZON_SHORT[g.horizon] : HORIZON_LABEL[g.horizon];
 
   const chips = h(
@@ -182,7 +180,7 @@ export function card(g, now) {
     // Past and archived: single list, both are shown.
     state.scope !== 'active' || state.view === 'horizon' ? h('span', { class: 'chip' }, categoryLabel(g.category)) : null,
     state.scope !== 'active' || state.view === 'category' ? h('span', { class: 'chip muted' }, when) : null,
-    expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : key) : null,
+    expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : g.period ?? '') : null,
     expired ? h('span', { class: done ? 'chip' : 'chip danger' }, done ? '✓ Completed' : '✗ Missed') : null,
     g.horizon === 'deadline' && g.deadline && !expired ? deadlineChip(g.deadline, now) : null,
     g.repo ? h('span', { class: 'chip muted' }, g.repo) : null,
@@ -212,13 +210,13 @@ export function card(g, now) {
       h(
         'div',
         { class: 'row' },
-        h('button', { class: 'round', 'aria-label': 'Decrease', disabled: !editable || value <= 0, onclick: () => dispatchGoals({ type: 'inc', id: g.id, key, delta: -1 }) }, '−'),
+        h('button', { class: 'round', 'aria-label': 'Decrease', disabled: !editable || value <= 0, onclick: () => dispatchGoals({ type: 'inc', id: g.id, delta: -1 }) }, '−'),
         h(
           'button',
-          { class: 'value', disabled: !editable, title: 'Enter exact value', onclick: () => askValue(g, key, value) },
+          { class: 'value', disabled: !editable, title: 'Enter exact value', onclick: () => askValue(g) },
           `${fmt(value)} / ${fmt(target)}${g.unit ? ` ${g.unit}` : ''}`,
         ),
-        h('button', { class: 'round', 'aria-label': 'Increase', disabled: !editable, onclick: () => dispatchGoals({ type: 'inc', id: g.id, key, delta: 1 }) }, '+'),
+        h('button', { class: 'round', 'aria-label': 'Increase', disabled: !editable, onclick: () => dispatchGoals({ type: 'inc', id: g.id, delta: 1 }) }, '+'),
       ),
     );
   } else {
@@ -231,7 +229,7 @@ export function card(g, now) {
           class: done ? 'btn done' : 'btn',
           'aria-pressed': String(done),
           disabled: !editable,
-          onclick: () => dispatchGoals({ type: 'set', id: g.id, key, value: done ? 0 : 1 }),
+          onclick: () => dispatchGoals({ type: 'set', id: g.id, value: done ? 0 : 1 }),
         },
         done ? '✓ Done' : 'Mark as done',
       ),
@@ -244,30 +242,30 @@ export function card(g, now) {
     h('button', { class: 'title', disabled: !canEdit(), onclick: () => openGoalForm(g) }, g.title),
     chips,
     g.notes ? h('p', { class: 'notes' }, g.notes) : null,
-    g.subgoals?.length ? subgoalList(g, key, editable) : null,
+    g.subgoals?.length ? subgoalList(g, editable) : null,
     progress,
   );
 }
 
-/** Checkboxes of the sub-goals. @param {Goal} g @param {string} key @param {boolean} editable */
-export function subgoalList(g, key, editable) {
+/** Checkboxes of the sub-goals. @param {Goal} g @param {boolean} editable */
+export function subgoalList(g, editable) {
   const subs = g.subgoals ?? [];
   return h(
     'div',
     { class: 'subs' },
-    h('p', { class: 'subs-count' }, `Sub-goals · ${subgoalsDone(g, key)} of ${subs.length}`),
+    h('p', { class: 'subs-count' }, `Sub-goals · ${subgoalsDone(g)} of ${subs.length}`),
     h(
       'ul',
       {},
       ...subs.map((s) => {
-        const done = s.done.includes(key);
+        const done = s.done;
         return h(
           'li',
           {},
           h(
             'label',
             { class: done ? 'sub done' : 'sub' },
-            h('input', { type: 'checkbox', checked: done, disabled: !editable, onchange: () => dispatchGoals({ type: 'toggleSub', id: g.id, subId: s.id, key, done: !done }) }),
+            h('input', { type: 'checkbox', checked: done, disabled: !editable, onchange: () => dispatchGoals({ type: 'toggleSub', id: g.id, subId: s.id, done: !done }) }),
             h('span', {}, s.title),
           ),
         );
@@ -283,13 +281,13 @@ export function deadlineChip(deadline, now) {
   return h('span', { class: d < 0 ? 'chip danger' : d <= 7 ? 'chip warn' : 'chip' }, `${deadline} · ${text}`);
 }
 
-/** @param {Goal} g @param {string} key @param {number} value */
-export function askValue(g, key, value) {
-  const input = prompt(`Value for “${g.title}” (${key})`, String(value));
+/** @param {Goal} g */
+export function askValue(g) {
+  const input = prompt(`Value for “${g.title}”`, String(g.progress));
   if (input === null) return;
   const n = Number(input.replace(',', '.'));
   if (!Number.isFinite(n) || n < 0) return alert('Enter a number greater than or equal to 0.');
-  dispatchGoals({ type: 'set', id: g.id, key, value: n });
+  dispatchGoals({ type: 'set', id: g.id, value: n });
 }
 
 export const NEW_CATEGORY = '__new__';
@@ -334,7 +332,7 @@ export function openGoalForm(goal, area = '') {
     actions.append(
       h('button', { type: 'button', class: 'btn', onclick: () => { dispatchGoals({ type: 'archive', id: goal.id, archived: !goal.archived }); dialog.close(); } }, goal.archived ? 'Restore' : 'Archive'),
       h('button', { type: 'button', class: 'link danger', onclick: () => {
-        if (confirm(`Delete “${goal.title}” permanently? Its progress history will be lost too.\n\nTo just hide it, use “Archive”.`)) {
+        if (confirm(`Delete “${goal.title}” permanently? Its progress will be lost too.\n\nTo just hide it, use “Archive”.`)) {
           dispatchGoals({ type: 'delete', id: goal.id });
           dialog.close();
         }
@@ -382,15 +380,15 @@ export function openGoalForm(goal, area = '') {
         ...old.filter((s) => !rows.some((r) => r.id === s.id)).map((s) => /** @type {Op} */ ({ type: 'removeSub', id: goal.id, subId: s.id })),
         ...rows.flatMap((r) => {
           const prev = old.find((s) => s.id === r.id);
-          if (!prev) return [/** @type {Op} */ ({ type: 'addSub', id: goal.id, sub: { id: newId('s_'), title: r.title, done: [] } })];
+          if (!prev) return [/** @type {Op} */ ({ type: 'addSub', id: goal.id, sub: { id: newId('s_'), title: r.title, done: false } })];
           return prev.title === r.title ? [] : [/** @type {Op} */ ({ type: 'editSub', id: goal.id, subId: r.id, title: r.title })];
         }),
       ];
       dispatchGoals({ type: 'edit', id: goal.id, fields }, ...subOps);
     } else {
       /** @type {Goal} */
-      const g = { id: newId(), kind: 'goal', ...fields, progress: {}, createdAt: new Date().toISOString() };
-      if (rows.length) g.subgoals = rows.map((r) => ({ id: newId('s_'), title: r.title, done: [] }));
+      const g = { id: newId(), kind: 'goal', ...fields, progress: 0, createdAt: new Date().toISOString() };
+      if (rows.length) g.subgoals = rows.map((r) => ({ id: newId('s_'), title: r.title, done: false }));
       dispatchGoals({ type: 'add', goal: g });
     }
     dialog.close();
@@ -504,10 +502,8 @@ export function areaSections({ ids }) {
 export function homeCard({ ids }) {
   const goals = liveGoals(ids).sort((a, b) => HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon));
   if (!goals.length) return { stats: [], body: [] };
-  const now = new Date();
   const bars = goals.slice(0, 2).map((g) => {
-    const key = goalKey(g, now, tz());
-    const value = g.progress[key] ?? 0;
+    const value = g.progress;
     const target = g.target && g.target > 0 ? g.target : 1;
     const fill = h('span');
     fill.style.width = `${Math.min(100, (value / target) * 100)}%`;

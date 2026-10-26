@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { periodKey, periodKeys, daysUntil, civilDate, isValidTimeZone } from '../lib/period.js';
-import { applyOps, categoryUsage, commitMessage, emptyDoc, goalKey, isDone, isExpired, normalize, serialize, subgoalsDone } from '../lib/goals.js';
+import { applyOps, categoryUsage, commitMessage, emptyDoc, isDone, isExpired, normalize, serialize, subgoalsDone } from '../lib/goals.js';
 import { encodeBase64, decodeBase64 } from '../lib/github.js';
 
 const UTC = 'UTC';
@@ -59,7 +59,7 @@ test('time zone validation', () => {
 
 const goal = (id, extra = {}) => ({
   id, kind: 'goal', title: `Objetivo ${id}`, category: 'Cat A', horizon: 'week', target: 4, unit: 'veces',
-  deadline: null, progress: {}, createdAt: '2026-09-28T00:00:00Z', repo: null, ...extra,
+  deadline: null, period: '2026-W40', progress: 0, createdAt: '2026-09-28T00:00:00Z', repo: null, ...extra,
 });
 
 test('empty document without categories and with a time zone', () => {
@@ -71,20 +71,20 @@ test('operations: progress, archive, delete, categories', () => {
   let doc = emptyDoc(UTC);
   doc = applyOps(doc, [
     { type: 'add', goal: goal('a') },
-    { type: 'inc', id: 'a', key: '2026-W40', delta: 1 },
-    { type: 'inc', id: 'a', key: '2026-W40', delta: 1 },
+    { type: 'inc', id: 'a', delta: 1 },
+    { type: 'inc', id: 'a', delta: 1 },
     { type: 'add', goal: goal('b', { category: 'Cat B' }) },
     { type: 'archive', id: 'b', archived: true },
   ]);
-  assert.equal(doc.goals[0].progress['2026-W40'], 2);
+  assert.equal(doc.goals[0].progress, 2);
   assert.equal(doc.goals[1].archived, true);
   assert.deepEqual(doc.categories, ['Cat A', 'Cat B']);
   doc = applyOps(doc, [
-    { type: 'inc', id: 'a', key: '2026-W40', delta: -5 }, // does not go below 0: the key is removed
+    { type: 'inc', id: 'a', delta: -5 }, // does not go below 0
     { type: 'archive', id: 'b', archived: false },
     { type: 'delete', id: 'b' },
   ]);
-  assert.deepEqual(doc.goals[0].progress, {});
+  assert.equal(doc.goals[0].progress, 0);
   assert.equal(doc.goals.length, 1);
 });
 
@@ -105,14 +105,14 @@ test('cambiar zona horaria', () => {
 
 test('conflict: re-applying operations on the new version does not overwrite external changes', () => {
   const base = applyOps(emptyDoc(UTC), [{ type: 'add', goal: goal('a') }]);
-  const pending = [{ type: 'inc', id: 'a', key: '2026-W40', delta: 1 }];
+  const pending = [{ type: 'inc', id: 'a', delta: 1 }];
   // Meanwhile, another client added a goal and progress on 'a'.
   const remote = applyOps(base, [
     { type: 'add', goal: goal('z', { title: 'Externo' }) },
-    { type: 'set', id: 'a', key: '2026-W40', value: 2 },
+    { type: 'set', id: 'a', value: 2 },
   ]);
   const merged = applyOps(remote, pending);
-  assert.equal(merged.goals.find((g) => g.id === 'a').progress['2026-W40'], 3);
+  assert.equal(merged.goals.find((g) => g.id === 'a').progress, 3);
   assert.ok(merged.goals.some((g) => g.id === 'z'));
   // If the goal was deleted elsewhere, the operation is ignored without error.
   const gone = applyOps({ ...remote, goals: remote.goals.filter((g) => g.id !== 'a') }, pending);
@@ -122,9 +122,9 @@ test('conflict: re-applying operations on the new version does not overwrite ext
 test('commit message with prefix and grouping', () => {
   const before = applyOps(emptyDoc(UTC), [{ type: 'add', goal: goal('a', { title: 'Run' }) }]);
   const ops = [
-    { type: 'inc', id: 'a', key: '2026-W40', delta: 1 },
-    { type: 'inc', id: 'a', key: '2026-W40', delta: 1 },
-    { type: 'inc', id: 'a', key: '2026-W40', delta: 1 },
+    { type: 'inc', id: 'a', delta: 1 },
+    { type: 'inc', id: 'a', delta: 1 },
+    { type: 'inc', id: 'a', delta: 1 },
   ];
   assert.equal(commitMessage(ops, before, applyOps(before, ops)), 'goals: progress “Run”');
   const del = [{ type: 'delete', id: 'a' }];
@@ -133,7 +133,7 @@ test('commit message with prefix and grouping', () => {
 
 test('normalize y serialize', () => {
   const doc = normalize({ goals: [{ ...goal('a', { category: 'Nueva' }), progress: undefined }] });
-  assert.deepEqual(doc.goals[0].progress, {});
+  assert.equal(doc.goals[0].progress, 0);
   assert.deepEqual(doc.categories, ['Nueva']);
   assert.equal(normalize({ timeZone: NY, goals: [] }).timeZone, NY);
   assert.ok(serialize(emptyDoc()).endsWith('}\n'));
@@ -146,26 +146,31 @@ test('base64 with accents and emojis', () => {
 });
 
 test('a goal stays in its period and expires when it ends', () => {
-  const g = goal('o', { period: '2026-W40', progress: { '2026-W40': 2 } });
+  const g = goal('o', { progress: 2 });
   const sunday = new Date('2026-10-04T23:00:00Z');
   const monday = new Date('2026-10-05T00:30:00Z');
   assert.ok(!isExpired(g, sunday, UTC));
   assert.ok(isExpired(g, monday, UTC));
-  assert.equal(goalKey(g, monday, UTC), '2026-W40'); // the result is still that of its week
-  assert.ok(!isDone(g, '2026-W40')); // 2 / 4 -> no cumplido
-  assert.ok(isDone({ ...g, target: null, progress: { '2026-W40': 1 } }, '2026-W40'));
+  assert.ok(!isDone(g)); // 2 / 4: not met
+  assert.ok(isDone({ ...g, target: null, progress: 1 }));
 });
 
 test('deadline: expires the day after the date', () => {
-  const g = goal('d', { horizon: 'deadline', deadline: '2026-10-09', target: null });
-  assert.equal(goalKey(g, new Date('2026-10-01T00:00:00Z'), UTC), 'once');
+  const g = goal('d', { horizon: 'deadline', deadline: '2026-10-09', period: null, target: null });
   assert.ok(!isExpired(g, new Date('2026-10-09T23:59:00Z'), UTC));
   assert.ok(isExpired(g, new Date('2026-10-10T00:01:00Z'), UTC));
 });
 
-test('compatibility: old repeating goals belong to the period in which they were created', () => {
-  const doc = normalize({ timeZone: UTC, goals: [goal('a', { repeat: true }), goal('b', { repeat: false, period: '2026-W41' }), goal('c', { horizon: 'deadline', repeat: true })] });
-  assert.deepEqual(doc.goals.map((g) => [g.period, 'repeat' in g]), [['2026-W40', false], ['2026-W41', false], [null, false]]);
+test('compatibility: the old format, with repeating goals and progress per period', () => {
+  const sub = (done) => ({ id: 's1', title: 'Step', done });
+  const doc = normalize({ timeZone: UTC, goals: [
+    goal('a', { repeat: true, period: undefined, progress: { '2026-W40': 3, '2026-W41': 1 }, subgoals: [sub(['2026-W41'])] }),
+    goal('b', { repeat: false, period: '2026-W41', progress: { '2026-W41': 2 }, subgoals: [sub(['2026-W41'])] }),
+    goal('c', { horizon: 'deadline', repeat: true, progress: { once: 5 } }),
+  ] });
+  // A repeating goal belongs to the period in which it was created, and only that period's values count.
+  assert.deepEqual(doc.goals.map((g) => [g.period, g.progress, g.subgoals?.[0].done, 'repeat' in g]),
+    [['2026-W40', 3, false, false], ['2026-W41', 2, true, false], [null, 5, undefined, false]]);
   assert.ok(isExpired(doc.goals[0], new Date('2026-10-05T12:00:00Z'), UTC));
 });
 
@@ -179,34 +184,34 @@ test('location and notes: saved, edited and removed', () => {
   assert.equal(normalize(JSON.parse(serialize(doc))).goals[0].notes, 'Otra');
 });
 
-test('sub-goals: add, tick per period, rename and remove', () => {
-  const sub = (id, title) => ({ id, title, done: [] });
+test('sub-goals: add, tick, rename and remove', () => {
+  const sub = (id, title) => ({ id, title, done: false });
   let doc = applyOps(emptyDoc(UTC), [{ type: 'add', goal: goal('g1', { subgoals: [sub('s1', 'Paso 1')] }) }]);
   doc = applyOps(doc, [
     { type: 'addSub', id: 'g1', sub: sub('s2', 'Paso 2') },
     { type: 'addSub', id: 'g1', sub: sub('s2', 'Duplicate') }, // same id: ignored
-    { type: 'toggleSub', id: 'g1', subId: 's1', key: '2026-W40', done: true },
-    { type: 'toggleSub', id: 'g1', subId: 's1', key: '2026-W40', done: true }, // idempotente
+    { type: 'toggleSub', id: 'g1', subId: 's1', done: true },
+    { type: 'toggleSub', id: 'g1', subId: 's1', done: true }, // idempotente
     { type: 'editSub', id: 'g1', subId: 's2', title: 'Paso dos' },
-    { type: 'toggleSub', id: 'nope', subId: 's1', key: '2026-W40', done: true }, // objetivo inexistente
+    { type: 'toggleSub', id: 'nope', subId: 's1', done: true }, // objetivo inexistente
   ]);
   const g = doc.goals[0];
   assert.deepEqual(g.subgoals?.map((s) => s.title), ['Paso 1', 'Paso dos']);
-  assert.equal(subgoalsDone(g, '2026-W40'), 1);
-  doc = applyOps(doc, [{ type: 'toggleSub', id: 'g1', subId: 's1', key: '2026-W40', done: false }]);
-  assert.equal(subgoalsDone(doc.goals[0], '2026-W40'), 0);
+  assert.equal(subgoalsDone(g), 1);
+  doc = applyOps(doc, [{ type: 'toggleSub', id: 'g1', subId: 's1', done: false }]);
+  assert.equal(subgoalsDone(doc.goals[0]), 0);
   doc = applyOps(doc, [{ type: 'removeSub', id: 'g1', subId: 's1' }, { type: 'removeSub', id: 'g1', subId: 's2' }]);
   assert.equal(doc.goals[0].subgoals, undefined); // without sub-goals the field is not left behind
   assert.match(commitMessage([{ type: 'removeSub', id: 'g1', subId: 's1' }], doc, doc), /sub-goals “Objetivo g1”/);
 });
 
-test('sub-objetivos: normalize tolera datos raros', () => {
+test('sub-goals: normalize tolerates odd data', () => {
   const doc = normalize({ goals: [
-    goal('a', { subgoals: [{ id: 's1', title: 'Ok', done: ['once', 3] }, { title: 'no id' }, null] }),
+    goal('a', { subgoals: [{ id: 's1', title: 'Ok', done: 'yes' }, { title: 'no id' }, null] }),
     goal('b', { subgoals: 'x' }),
     goal('c'),
   ] });
-  assert.deepEqual(doc.goals[0].subgoals, [{ id: 's1', title: 'Ok', done: ['once'] }]);
+  assert.deepEqual(doc.goals[0].subgoals, [{ id: 's1', title: 'Ok', done: false }]);
   assert.equal(doc.goals[1].subgoals, undefined);
   assert.ok(!('subgoals' in doc.goals[2]));
 });
