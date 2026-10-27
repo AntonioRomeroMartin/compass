@@ -223,7 +223,7 @@ test('domains: list, add and edit (domains.json is created on the first write)',
   const out = run('domains');
   assert.match(out, /^studies — Studies · \S+$/m);
   assert.match(out, /^ {2}studies\/course-a — Course A · \S+ · teal$/m);
-  assert.match(out, /^Not registered \(used by goals or tasks\): Sport$/m);
+  assert.match(out, /^Not registered \(used by goals, tasks or habits\): Sport$/m);
   assert.match(git(join(dir, 'a'), 'log', '-1', '--format=%s'), /^domains: edited “studies\/course-a”, paths “studies\/course-a”$/m);
 });
 

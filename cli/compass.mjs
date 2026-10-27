@@ -6,10 +6,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
+import { HORIZONS, addDays, daysUntil, deviceTimeZone, isValidTimeZone, periodKey, periodKeys } from '../lib/period.js';
 import { applyOps, commitMessage, emptyDoc, isDone, isExpired, newId, normalize, serialize, subgoalsDone } from '../lib/goals.js';
 import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
+import * as habits from '../lib/habits.js';
 import { buildToday } from '../lib/today.js';
 import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, readJsonIfExists } from './repo.mjs';
 
@@ -20,6 +21,8 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
 /** @typedef {import('../lib/tasks.js').Task} Task */
 /** @typedef {import('../lib/tasks.js').TasksDoc} TasksDoc */
 /** @typedef {import('../lib/domains.js').DomainsDoc} DomainsDoc */
+/** @typedef {import('../lib/habits.js').Habit} Habit */
+/** @typedef {import('../lib/habits.js').HabitsDoc} HabitsDoc */
 /** @typedef {import('./repo.mjs').Config} Config */
 
 /**
@@ -33,10 +36,11 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
  * @property {GoalsDoc} goals
  * @property {TasksDoc} tasks
  * @property {DomainsDoc} domains
+ * @property {HabitsDoc} habits
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks and domains from the command line
+const HELP = `compass — goals, tasks, habits and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
@@ -55,6 +59,12 @@ Usage:
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T]          (none clears a field)
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
+  compass habits [--domain D | --cwd PATH] [--archived]
+  compass habit add "title" (--domain D | --cwd PATH) --freq F [--notes T]
+  compass habit done|undo <habit> [DATE]   default today; also yesterday, -N, YYYY-MM-DD
+  compass habit edit <habit> [--title T] [--domain D] [--freq F] [--notes T]
+  compass habit archive|unarchive <habit>
+  compass habit delete <habit> --yes    for good, with its history (archive keeps it)
   compass domains
   compass domain add <id> [--name N] [--parent P] [--path DIR] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR] [--remove-path DIR]
@@ -73,7 +83,7 @@ Usage:
 <task>, <goal>: an id (t_…, g_…) or part of the title. D: a domain id or name. --cwd: the domain whose
 "paths" contain that folder (a subdomain also sees the dated items of its parents).
 DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
-weekdays, monthly, monthly:15, none.
+weekdays, monthly, monthly:15, none. F (habits): daily, 3/week (any days), mon,thu.
 --no-sync skips git pull/push; --timeout S limits the pull (default 3 s for today, 20 s otherwise).
 Config: ~/.config/compass/config.json →
   {"repo": "<data repo checkout>", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json"}`;
@@ -325,6 +335,7 @@ async function main() {
   const ctx = {
     cfg, now, sync, tz, gtz: isValidTimeZone(goalsDoc.timeZone) ? goalsDoc.timeZone : tz, today: periodKey('day', now, tz),
     goals: goalsDoc, tasks: tasksDoc, domains: domains.normalize(readJsonIfExists(cfg, cfg.domains) ?? domains.emptyDoc()),
+    habits: habits.normalize(readJsonIfExists(cfg, cfg.habits) ?? habits.emptyDoc()),
   };
 
   switch (cmd) {
@@ -335,6 +346,8 @@ async function main() {
     case 'domain': return domain(ctx, sub, rest, flags);
     case 'goals': return listGoals(ctx, flags);
     case 'goal': return goal(ctx, sub, rest, flags);
+    case 'habits': return listHabits(ctx, flags);
+    case 'habit': return habit(ctx, sub, rest, flags);
     default: fail(`unknown command “${cmd}” (compass help)`);
   }
 }
@@ -646,9 +659,9 @@ function listDomains(ctx) {
   };
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
   for (const d of doc.domains) print(d, 0); // left out by a cycle
-  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain)])]
+  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain)])]
     .filter((c) => c && !domains.domainOfCategory(doc, c));
-  if (doc.domains.length && loose.length) console.log(`Not registered (used by goals or tasks): ${loose.join(', ')}`);
+  if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks or habits): ${loose.join(', ')}`);
   for (const p of domains.validate(doc)) console.error(`warning: ${p}`);
 }
 
@@ -689,6 +702,112 @@ function domain(ctx, sub, rest, flags) {
     return { text: domains.serialize(domains.applyOps(before, ops)), message: domains.commitMessage(ops) };
   }, { sync: ctx.sync });
   report(res, ctx.sync);
+}
+
+/**
+ * One line per habit: ✓ done today, its frequency, how this week is going and its domain.
+ * @param {Habit} h @param {Ctx} ctx
+ */
+function habitLine(h, ctx) {
+  const { done, of } = habits.weekProgress(h, ctx.today);
+  const bits = [habits.freqText(h.freq), `${done}/${of} this week`, h.domain];
+  if (h.archived) bits.push('archived');
+  return `${habits.isDoneOn(h, ctx.today) ? '✓' : '·'} [${h.id}] ${h.title} — ${bits.join(' · ')}`;
+}
+
+/**
+ * @param {HabitsDoc} doc @param {string | undefined} ref
+ * @returns {Habit}
+ */
+function findHabit(doc, ref) {
+  if (!ref) fail('which habit? (id or part of the title)');
+  const byId = doc.habits.find((x) => x.id === ref);
+  if (byId) return byId;
+  const q = ref.toLowerCase();
+  const all = doc.habits.filter((x) => x.title.toLowerCase().includes(q));
+  const live = all.filter((x) => !x.archived);
+  const pool = live.length ? live : all;
+  if (pool.length === 1) return pool[0];
+  if (!pool.length) fail(`no habit matches “${ref}”`);
+  return fail(`“${ref}” matches several habits:\n${pool.map((x) => `  [${x.id}] ${x.title}`).join('\n')}`);
+}
+
+/** @param {Ctx} ctx @param {Record<string, string | true>} flags */
+function listHabits(ctx, flags) {
+  const scope = scopeFrom(ctx, flags);
+  if (scope.note && !scope.id) console.error(`note: ${scope.note}; listing every domain`);
+  const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
+  const list = ctx.habits.habits.filter((h) => !!h.archived === !!flags.archived && (!own || own.has(domains.canonical(ctx.domains, h.domain))));
+  if (!list.length) console.log(flags.archived ? 'No archived habits.' : 'No habits.');
+  for (const h of list) console.log(habitLine(h, ctx));
+}
+
+/**
+ * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
+ * @param {Record<string, string | true>} flags
+ */
+function habit(ctx, sub, rest, flags) {
+  /** @param {string} text */
+  const freq = (text) => attempt(() => habits.parseFreq(text));
+  /** @type {habits.Op[]} */
+  let ops;
+  /** @type {string} */
+  let id;
+  if (sub === 'add') {
+    const title = rest[0] ?? str(flags.title);
+    if (!title) fail('habit add needs a title: compass habit add "title" --domain D --freq daily');
+    const scope = scopeFrom(ctx, flags);
+    if (!scope.id) fail(scope.note ? `${scope.note}; use --domain` : 'a habit needs a domain: --domain D (or --cwd PATH)');
+    if (!str(flags.freq)) fail('a habit needs --freq: daily, 3/week or mon,thu');
+    const h = habits.newHabit({ title, domain: /** @type {string} */ (scope.id), freq: freq(/** @type {string} */ (str(flags.freq))), notes: orNull(str(flags.notes)) }, ctx.now);
+    id = h.id;
+    ops = [{ type: 'add', habit: h }];
+  } else {
+    const h = findHabit(ctx.habits, rest[0]);
+    id = h.id;
+    switch (sub) {
+      case 'done':
+      case 'undo': {
+        const text = (rest[1] ?? 'today').trim().toLowerCase();
+        const back = /^-(\d+)$/.exec(text);
+        const date = text === 'yesterday' ? addDays(ctx.today, -1) : back ? addDays(ctx.today, -Number(back[1])) : attempt(() => tasks.parseDue(text, ctx.today));
+        if (!date) fail('which day? (today, yesterday, -N or YYYY-MM-DD)');
+        if (date > ctx.today) fail(`${date} has not come yet`);
+        ops = [{ type: 'mark', id, date, done: sub === 'done' }];
+        break;
+      }
+      case 'edit': {
+        /** @type {Partial<Pick<Habit, 'title'|'domain'|'freq'|'notes'>>} */
+        const fields = {};
+        if (str(flags.title)) fields.title = /** @type {string} */ (str(flags.title));
+        if (str(flags.domain)) fields.domain = domainRef(ctx, /** @type {string} */ (str(flags.domain)));
+        if (str(flags.freq)) fields.freq = freq(/** @type {string} */ (str(flags.freq)));
+        if (str(flags.notes) !== undefined) fields.notes = orNull(str(flags.notes));
+        if (!Object.keys(fields).length) fail('nothing to change: --title, --domain, --freq or --notes');
+        ops = [{ type: 'edit', id, fields }];
+        break;
+      }
+      case 'archive':
+      case 'unarchive':
+        ops = [{ type: 'archive', id, archived: sub === 'archive' }];
+        break;
+      case 'delete':
+        if (!flags.yes) fail(`delete removes “${h.title}” and its history for good; to keep them use “compass habit archive”. Add --yes to delete it.`);
+        ops = [{ type: 'delete', id }];
+        break;
+      default:
+        return fail(`unknown habit action “${sub}” (compass help)`);
+    }
+  }
+  const res = commitChange(ctx.cfg, ctx.cfg.habits, (raw) => {
+    const before = raw ? habits.normalize(raw) : habits.emptyDoc(ctx.tz);
+    const after = habits.applyOps(before, ops);
+    if (habits.serialize(after) === habits.serialize(before)) return null;
+    return { text: habits.serialize(after), message: habits.commitMessage(ops, before, after) };
+  }, { sync: ctx.sync });
+  report(res, ctx.sync);
+  const saved = habits.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.habits)).habits.find((x) => x.id === id);
+  if (saved) console.log(habitLine(saved, ctx));
 }
 
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
