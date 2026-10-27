@@ -5,6 +5,7 @@
 
 import * as tasks from './tasks/view.js';
 import * as goals from './goals/view.js';
+import * as habits from './habits/view.js';
 
 /**
  * What a module is asked to show: one area (or the sub-area chosen in its page) and everything below it.
@@ -25,7 +26,7 @@ import * as goals from './goals/view.js';
  * @typedef {Object} Module
  * @property {string} id
  * @property {string} title                         heading of its block in an area's page
- * @property {string} addLabel                      its "+" button there ("Task", "Goal")
+ * @property {string} addLabel                      its "+" button there ("Task", "Goal", "Habit")
  * @property {(area: string) => void} add           opens its sheet with that area chosen
  * @property {(scope: AreaScope) => HTMLElement[]} areaSections
  * @property {(scope: AreaScope) => HomeCard} homeCard
@@ -35,6 +36,7 @@ import * as goals from './goals/view.js';
 export const MODULES = [
   { id: 'tasks', title: 'Tasks', addLabel: 'Task', add: (area) => tasks.openTaskForm(undefined, area), areaSections: tasks.areaSections, homeCard: tasks.homeCard },
   { id: 'goals', title: 'Goals', addLabel: 'Goal', add: (area) => goals.openGoalForm(undefined, area), areaSections: goals.areaSections, homeCard: goals.homeCard },
+  { id: 'habits', title: 'Habits', addLabel: 'Habit', add: (area) => habits.openHabitForm(undefined, area), areaSections: habits.areaSections, homeCard: habits.homeCard },
 ];
 
 /** Modules of an area, in the order they are shown (for now, all of them). @param {string} _areaId */

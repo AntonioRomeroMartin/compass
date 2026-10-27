@@ -25,6 +25,7 @@
     <div id="nav-areas" class="nav-areas" hidden></div>
     <button id="add" class="tab-add" aria-label="New"><span class="ico" aria-hidden="true">+</span><span>New</span></button>
     <button data-tab="goals"><span class="ico" aria-hidden="true">◇</span><span>Goals</span></button>
+    <button data-tab="habits"><span class="ico" aria-hidden="true">✓</span><span>Habits</span></button>
     <button data-tab="more"><span class="ico" aria-hidden="true">⋯</span><span>More</span></button>
   </nav>
 
@@ -67,6 +68,8 @@
       <main id="list"></main>
     </section>
 
+    <section id="view-habits" data-view-of="habits" hidden></section>
+
     <section id="view-more" data-view-of="more" hidden>
       <ul class="menu">
         <li><button id="settings" class="menu-item">GitHub connection<span class="hint">Token, repo and data files</span></button></li>
@@ -82,6 +85,7 @@
         <div class="segmented kind-switch" role="group" aria-label="Kind">
           <button type="button" aria-pressed="true">Task</button>
           <button type="button" data-switch="goal" aria-pressed="false">Goal</button>
+          <button type="button" data-switch="habit" aria-pressed="false">Habit</button>
         </div>
       </div>
       <input name="title" required maxlength="160" autocomplete="off" placeholder="What needs doing?" aria-label="Title" class="big">
@@ -140,6 +144,7 @@
         <div class="segmented kind-switch" role="group" aria-label="Kind">
           <button type="button" data-switch="task" aria-pressed="false">Task</button>
           <button type="button" aria-pressed="true">Goal</button>
+          <button type="button" data-switch="habit" aria-pressed="false">Habit</button>
         </div>
       </div>
       <label>Title
@@ -195,6 +200,55 @@
     </form>
   </dialog>
 
+  <dialog id="habit-dialog" class="sheet">
+    <form id="habit-form" novalidate>
+      <div class="sheet-head">
+        <h2 id="habit-dialog-title">New habit</h2>
+        <div class="segmented kind-switch" role="group" aria-label="Kind">
+          <button type="button" data-switch="task" aria-pressed="false">Task</button>
+          <button type="button" data-switch="goal" aria-pressed="false">Goal</button>
+          <button type="button" aria-pressed="true">Habit</button>
+        </div>
+      </div>
+      <input name="title" required maxlength="120" autocomplete="off" placeholder="What do you want to keep doing?" aria-label="Title" class="big">
+      <fieldset class="pick">
+        <legend>Area</legend>
+        <div id="habit-areas" class="chip-pick" role="radiogroup" aria-label="Area"></div>
+      </fieldset>
+      <fieldset class="pick">
+        <legend>How often</legend>
+        <div id="habit-freq" class="chip-pick" role="radiogroup" aria-label="How often"></div>
+        <div id="habit-times" class="chip-pick" role="radiogroup" aria-label="Times a week" hidden></div>
+        <div id="habit-days" class="chip-pick" role="group" aria-label="Days" hidden></div>
+      </fieldset>
+      <label>Notes (optional)
+        <textarea name="notes" rows="2" maxlength="2000" placeholder="When, how…"></textarea>
+      </label>
+      <p id="habit-msg" class="msg" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <div id="habit-extra-actions" class="extra"></div>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="habit-submit">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="habit-cal-dialog">
+    <div class="dialog-body">
+      <h2 id="habit-cal-title"></h2>
+      <p id="habit-cal-sub" class="hint"></p>
+      <p id="habit-cal-notes" class="notes" hidden></p>
+      <div class="cal-head">
+        <button type="button" id="cal-prev" class="icon" aria-label="Previous month">‹</button>
+        <strong id="cal-month"></strong>
+        <button type="button" id="cal-next" class="icon" aria-label="Next month">›</button>
+      </div>
+      <div id="cal-grid" class="cal"></div>
+      <p class="hint">Tap a day to mark or unmark it.</p>
+      <div class="actions"><div id="habit-cal-extra" class="extra"></div><button type="button" class="btn primary" data-close>Done</button></div>
+    </div>
+  </dialog>
+
   <dialog id="manage-dialog">
     <div class="dialog-body">
       <h2>Categories</h2>
@@ -220,7 +274,7 @@
         Create a <em>fine-grained</em> token with access to that repo only and the
         <em>Contents: Read and write</em> permission. The token is stored only in this browser; this site has
         no server and only talks to <code>api.github.com</code>. If the file doesn't exist, the app offers to create it.
-        Tasks and areas live next to it (<code>tasks.json</code>, <code>domains.json</code>).</p>
+        Tasks, areas and habits live next to it (<code>tasks.json</code>, <code>domains.json</code>, <code>habits.json</code>).</p>
       <label>GitHub token
         <input name="token" type="password" required autocomplete="off" spellcheck="false" placeholder="github_pat_…">
       </label>

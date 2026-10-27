@@ -3,7 +3,7 @@
 import * as tasksLib from '../../../lib/tasks.js';
 import * as domainsLib from '../../../lib/domains.js';
 import { canEdit, domainsStore, inAreas, tasksStore, todayKey, tz } from '../../core/data.js';
-import { $, chipPicker, editRow, h } from '../../core/ui.js';
+import { $, areaPicker, chipPicker, editRow, h } from '../../core/ui.js';
 import { newId } from '../../../lib/goals.js';
 import { addDays, daysUntil, endOfWeek, periodKey } from '../../../lib/period.js';
 
@@ -70,24 +70,8 @@ export function openTaskForm(task, domain) {
   $('task-submit').textContent = task ? 'Save' : 'Add';
   f.title.value = task?.title ?? '';
 
-  // Area: parents followed by their sub-areas.
   let area = task ? domainsLib.canonical(doms, task.domain) || task.domain : domain ?? '';
-  /** @type {[string, string][]} */
-  const areaItems = [];
-  /** @param {string|undefined} parent @param {number} depth */
-  const walk = (parent, depth) => {
-    for (const d of doms.domains.filter((x) => (x.parent ?? '') === (parent ?? ''))) {
-      areaItems.push([d.id, d.name]);
-      walk(d.id, depth + 1);
-    }
-  };
-  walk(undefined, 0);
-  if (area && !areaItems.some(([id]) => id === area)) areaItems.push([area, area]);
-  chipPicker($('task-areas'), areaItems, area, (v) => { area = v; });
-  for (const b of $('task-areas').querySelectorAll('button')) {
-    const d = domainsLib.find(doms, /** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.v));
-    if (d?.parent) b.classList.add('sub');
-  }
+  areaPicker($('task-areas'), doms, area, (v) => { area = v; });
 
   // When.
   const due = task?.due ?? null;

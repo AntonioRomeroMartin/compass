@@ -1,5 +1,6 @@
 // @ts-check
 // DOM helpers, local storage and small widgets shared by every view.
+import * as domainsLib from '../../lib/domains.js';
 
 
 /**
@@ -59,6 +60,28 @@ export function chipPicker(box, items, value, onPick) {
       },
     }, text)),
   );
+}
+
+/**
+ * Area chips of a sheet: parents followed by their sub-areas (smaller). An area that is not registered is kept as a chip.
+ * @param {HTMLElement} box @param {import('../../lib/domains.js').DomainsDoc} doms @param {string} area @param {(v: string) => void} onPick
+ */
+export function areaPicker(box, doms, area, onPick) {
+  /** @type {[string, string][]} */
+  const items = [];
+  /** @param {string} parent */
+  const walk = (parent) => {
+    for (const d of doms.domains.filter((x) => (x.parent ?? '') === parent)) {
+      items.push([d.id, d.name]);
+      walk(d.id);
+    }
+  };
+  walk('');
+  if (area && !items.some(([id]) => id === area)) items.push([area, area]);
+  chipPicker(box, items, area, onPick);
+  for (const b of box.querySelectorAll('button')) {
+    if (domainsLib.find(doms, /** @type {string} */ (/** @type {HTMLElement} */ (b).dataset.v))?.parent) b.classList.add('sub');
+  }
 }
 
 /**

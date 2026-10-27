@@ -290,9 +290,28 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 details.sub-group > summary h3::before { content: "▸"; font-size: .8em; }
 details.sub-group[open] > summary h3::before { content: "▾"; }
 
-/* phone: "More" lives in the header's ⚙, so the bottom bar keeps five buttons */
+/* phone: "More" lives in the header's ⚙, so the bottom bar keeps six buttons */
 @media (max-width: 899px) {
   .tabs [data-tab="more"] { display: none; }
   #open-more[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
 }
 @media (min-width: 900px) { .phone-only { display: none; } }
+
+/* habits: month calendar (done filled; days a habit is not meant for, dimmed; today outlined) */
+#habit-times:not([hidden]), #habit-days:not([hidden]) { margin-top: 8px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: 330px; margin: 0 auto; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; max-width: 330px; margin: 0 auto; }
+.cal-wd { text-align: center; font-size: .75rem; color: var(--muted); padding-bottom: 2px; }
+.cal-day { aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: .88rem; display: grid; place-items: center; }
+.cal-day.off { opacity: .45; }
+.cal-day.done { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; opacity: 1; }
+.cal-day.today { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cal-day:disabled { cursor: default; }
+.cal-day:disabled:not(.done) { color: var(--muted); background: none; border-color: transparent; }
+/* a habit's tick is round, a task's square */
+.task.habit input[type="checkbox"] {
+  appearance: none; border-radius: 50%; border: 2px solid var(--muted); background: none; display: grid; place-items: center; cursor: pointer;
+}
+.task.habit input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.task.habit input[type="checkbox"]:checked::after { content: "✓"; color: var(--bg); font-size: .75rem; font-weight: 700; }
+.task.habit input[type="checkbox"]:disabled { opacity: .5; cursor: default; }

@@ -3,19 +3,21 @@ import { LS, STORES, canEdit, current, goalsStore, loaded, online, persist, refr
 import { $, h, lsGet, lsSet } from './core/ui.js';
 import { openGoalForm, openManage, renderList, renderToolbar, syncFormVisibility } from './modules/goals/view.js';
 import { openTaskForm } from './modules/tasks/view.js';
+import { openHabitForm } from './modules/habits/view.js';
+import { renderHabitsView } from './views/habits.js';
 import { renderAreas, renderNavAreas } from './views/areas.js';
 import { openSettings } from './views/settings.js';
 import { renderHome } from './views/home.js';
 import { renderTodayView } from './views/today.js';
 import { civilDate, periodKeys } from '../lib/period.js';
 
-/** @typedef {'home'|'today'|'areas'|'goals'|'more'} Tab */
+/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'more'} Tab */
 
 /** @type {Tab[]} */
-const TABS = ['home', 'today', 'areas', 'goals', 'more'];
+const TABS = ['home', 'today', 'areas', 'goals', 'habits', 'more'];
 
 /** @type {Record<Tab, string>} */
-const TAB_TITLE = { home: 'Home', today: 'Today', areas: 'Areas', goals: 'Goals', more: 'More' };
+const TAB_TITLE = { home: 'Home', today: 'Today', areas: 'Areas', goals: 'Goals', habits: 'Habits', more: 'More' };
 
 function renderAll() {
   renderTabs();
@@ -24,6 +26,7 @@ function renderAll() {
   if (state.tab === 'home') renderHome();
   if (state.tab === 'today') renderTodayView();
   if (state.tab === 'areas') renderAreas();
+  if (state.tab === 'habits') renderHabitsView();
   if (state.tab === 'goals') {
     renderToolbar();
     renderList();
@@ -167,11 +170,13 @@ function init() {
     render();
   });
   $('add').addEventListener('click', () => openTaskForm());
-  // Task · Goal switch at the top of a new item's sheet.
+  // Task · Goal · Habit switch at the top of a new item's sheet.
   for (const btn of document.querySelectorAll('[data-switch]')) {
     btn.addEventListener('click', () => {
       /** @type {HTMLDialogElement} */ (btn.closest('dialog')).close();
-      if (/** @type {HTMLElement} */ (btn).dataset.switch === 'goal') openGoalForm();
+      const kind = /** @type {HTMLElement} */ (btn).dataset.switch;
+      if (kind === 'goal') openGoalForm();
+      else if (kind === 'habit') openHabitForm();
       else openTaskForm();
     });
   }
@@ -181,6 +186,8 @@ function init() {
   $('manage').addEventListener('click', openManage);
   $('open-manage').addEventListener('click', openManage);
   $('task-dialog').addEventListener('close', () => render());
+  $('habit-dialog').addEventListener('close', () => render());
+  $('habit-cal-dialog').addEventListener('close', () => render());
   const goalForm = /** @type {HTMLFormElement} */ ($('goal-form'));
   goalForm.addEventListener('change', () => syncFormVisibility(goalForm));
   for (const btn of document.querySelectorAll('[data-close]')) {

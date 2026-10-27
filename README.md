@@ -1,6 +1,6 @@
 # Compass
 
-A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearly and with a deadline) and by category, plus a command line (`compass`) that also handles **tasks** and **domains** (areas such as work, sport or studies) and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
+A static PWA to track **tasks**, **habits** and **goals** (by horizon: daily to yearly, or with a deadline) across **domains** (areas such as work, sport or studies), plus a command line (`compass`) that works on the same data and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
 
 ## How to use it
 
@@ -20,7 +20,7 @@ A static PWA to track goals by horizon (daily, weekly, monthly, quarterly, yearl
 
 ## Data format
 
-Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `domains.json`), saved with
+Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `domains.json`), saved with
 2-space indentation so diffs stay readable. Commits that change data start with the file's prefix (`goals:`,
 `tasks:`, `domains:`).
 
@@ -91,6 +91,24 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - `ongoing`: path of a text file with the state of work in progress; "today" lists these tasks even without a date.
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 
+### Habits (`habits.json`)
+
+```json
+{
+  "version": 1,
+  "timeZone": "Area/City",
+  "habits": [{ "id": "h_…", "title": "…", "domain": "sport", "freq": { "type": "weekly", "times": 3 },
+               "notes": null, "done": ["2026-10-26", "2026-10-28"], "createdAt": "…" }]
+}
+```
+
+- Something done on some days, marked done or not done per day (`done`: the civil days, sorted). No streaks: each
+  habit shows how this week (Monday to Sunday) is going.
+- `freq`: `{"type": "daily"}` (of 7), `{"type": "weekly", "times": N}` (N days a week, any of them; it stops showing
+  in Today once the week has N) or `{"type": "days", "days": [1…7]}` (those ISO weekdays; only they count).
+- Any past day can be marked or unmarked from the habit's month calendar. `archived: true` retires it and keeps
+  its history.
+
 ## Command line
 
 `cli/compass.mjs` reads and changes the same data from a local git checkout of your data repo, with the same
@@ -112,6 +130,8 @@ compass task done "problem set"       # a task by id or part of its title
 compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none
 compass tasks --due week              # also: --domain D, --cwd PATH, --due today|overdue, --all
 compass today --cwd "$PWD"            # what matters in the domain of this folder
+compass habit add "Stretch" --domain sport --freq mon,wed,fri   # or: daily, 3/week
+compass habit done stretch yesterday  # also: today (default), -N, YYYY-MM-DD
 compass help                          # every command (goals, sub-tasks, focus, edit…)
 ```
 
