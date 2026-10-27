@@ -61,7 +61,7 @@ Usage:
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
   compass habits [--domain D | --cwd PATH] [--archived]
   compass habit add "title" (--domain D | --cwd PATH) --freq F [--notes T]
-  compass habit done|undo <habit> [DATE]   default today; also yesterday, -N, YYYY-MM-DD
+  compass habit done|undo <habit> [DATE…]  default today; also yesterday, -N, YYYY-MM-DD (several: one commit)
   compass habit edit <habit> [--title T] [--domain D] [--freq F] [--notes T]
   compass habit archive|unarchive <habit>
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
@@ -768,12 +768,17 @@ function habit(ctx, sub, rest, flags) {
     switch (sub) {
       case 'done':
       case 'undo': {
-        const text = (rest[1] ?? 'today').trim().toLowerCase();
-        const back = /^-(\d+)$/.exec(text);
-        const date = text === 'yesterday' ? addDays(ctx.today, -1) : back ? addDays(ctx.today, -Number(back[1])) : attempt(() => tasks.parseDue(text, ctx.today));
-        if (!date) fail('which day? (today, yesterday, -N or YYYY-MM-DD)');
-        if (date > ctx.today) fail(`${date} has not come yet`);
-        ops = [{ type: 'mark', id, date, done: sub === 'done' }];
+        /** @param {string} raw */
+        const day = (raw) => {
+          const text = raw.trim().toLowerCase();
+          const back = /^-(\d+)$/.exec(text);
+          const date = text === 'yesterday' ? addDays(ctx.today, -1) : back ? addDays(ctx.today, -Number(back[1])) : attempt(() => tasks.parseDue(text, ctx.today));
+          if (!date) fail('which day? (today, yesterday, -N or YYYY-MM-DD)');
+          if (date > ctx.today) fail(`${date} has not come yet`);
+          return date;
+        };
+        const dates = [...new Set((rest.length > 1 ? rest.slice(1) : ['today']).map(day))].sort();
+        ops = dates.map((date) => ({ type: /** @type {const} */ ('mark'), id, date, done: sub === 'done' }));
         break;
       }
       case 'edit': {

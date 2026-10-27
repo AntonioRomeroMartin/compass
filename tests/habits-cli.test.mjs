@@ -22,6 +22,12 @@ test('habits: add, mark today and past days, list, edit, archive and delete', ()
   assert.equal(read('a', 'habits.json').habits[0].done.length, 3);
   run('habit', 'undo', 'gym', 'yesterday');
   assert.equal(read('a', 'habits.json').habits[0].done.length, 2);
+  // Several days in one commit (as a sync script does), already marked ones left as they are.
+  const before = git(join(dir, 'a'), 'rev-list', '--count', 'HEAD');
+  assert.match(run('habit', 'done', 'gym', '-3', '-5', '-6'), /^habits: done “Gym” \d{4}-\d{2}-\d{2}, \d{4}-\d{2}-\d{2}, \d{4}-\d{2}-\d{2}\n/);
+  assert.equal(Number(git(join(dir, 'a'), 'rev-list', '--count', 'HEAD')), Number(before) + 1);
+  assert.equal(read('a', 'habits.json').habits[0].done.length, 4);
+  run('habit', 'undo', 'gym', '-5', '-6');
   // Not a future day, and the domain must exist.
   assert.match(runAll('habit', 'done', 'gym', 'tomorrow').stderr, /has not come yet/);
   assert.match(runAll('habit', 'add', 'Swim', '--domain', 'nowhere', '--freq', 'daily').stderr, /unknown domain/);
