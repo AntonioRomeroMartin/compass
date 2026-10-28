@@ -2,7 +2,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as books from '../lib/books.js';
-import * as domains from '../lib/domains.js';
 
 const NOW = new Date('2026-03-02T10:00:00Z');
 
@@ -39,7 +38,7 @@ test('normalize fills missing fields and drops bad values (and the pages of olde
   ] });
   assert.equal(doc.books.length, 1);
   const [b] = doc.books;
-  assert.deepEqual([b.status, b.rating, b.cover, b.author, b.started], ['want', null, 123, null, null]);
+  assert.deepEqual([b.status, b.rating, b.cover, b.author, b.started, b.domain], ['want', null, 123, null, null, null]);
   assert.ok(!('page' in b) && !('pages' in b));
   assert.deepEqual(b.quotes, [{ id: 'r', text: 'ok', page: null }]);
 });
@@ -58,14 +57,4 @@ test('parseStatus and the Open Library results', () => {
     { title: 'Bare', author: null, olid: 'OL2W', cover: null, year: null },
   ]);
   assert.equal(books.coverUrl(42, 'S'), 'https://covers.openlibrary.org/b/id/42-S.jpg');
-});
-
-test('domain modules: own and inherited from the parents', () => {
-  let doc = domains.normalize({ domains: [{ id: 'reading', name: 'Reading', modules: ['books', 'books', ''] }, { id: 'reading/club', name: 'Club' }, { id: 'work', name: 'Work' }] });
-  assert.deepEqual(doc.domains[0].modules, ['books']);
-  assert.deepEqual(domains.modulesOf(doc, 'reading/club'), ['books']);
-  assert.deepEqual(domains.modulesOf(doc, 'work'), []);
-  doc = domains.applyOps(doc, [{ type: 'addModule', id: 'work', module: 'books' }, { type: 'removeModule', id: 'reading', module: 'books' }]);
-  assert.deepEqual(doc.domains.map((d) => d.modules), [undefined, undefined, ['books']]);
-  assert.equal(domains.commitMessage([{ type: 'addModule', id: 'work', module: 'books' }]), 'domains: modules “work”');
 });

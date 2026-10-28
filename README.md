@@ -56,8 +56,7 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   "domains": [
     { "id": "studies", "name": "Studies", "paths": ["~/projects/studies"], "color": "#3366aa" },
     { "id": "studies/course-a", "name": "Course A", "parent": "studies", "paths": ["~/projects/studies/course-a"] },
-    { "id": "sport", "name": "Sport" },
-    { "id": "reading", "name": "Reading", "modules": ["books"] }
+    { "id": "sport", "name": "Sport" }
   ]
 }
 ```
@@ -67,9 +66,8 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - **Domains and goal categories are one list**: a goal's `category` is the id or the name of a domain
   (`Sport` and `sport` both match the `sport` domain). Categories that are not registered keep working as
   plain labels, and `compass domains` lists them so they can be registered. Nothing needs migrating.
-- **Modules:** tasks, goals and habits belong to every domain. Other modules (for now `books`) belong only to the
-  domains that list them in `modules`, and to their subdomains, which inherit them: their block shows on that
-  area's page and on its card on Home.
+- **Blocks of an area's page:** tasks, goals and habits show in every area, even empty. Books show only in the areas
+  that have some (a domain and its subdomains).
 - A folder belongs to the domain with the **longest** path that contains it (`~/projects/studies/course-a/week-3`
   → `studies/course-a`; whole folder names only). A view scoped to a domain shows that domain and its subdomains
   in full, plus the dated items of its parents (a course sees the deadlines of its degree, not its siblings' tasks).
@@ -121,13 +119,15 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 {
   "version": 1,
   "timeZone": "Area/City",
-  "books": [{ "id": "b_…", "title": "…", "author": "…", "domain": "reading", "status": "reading",
+  "books": [{ "id": "b_…", "title": "…", "author": "…", "domain": null, "status": "reading",
               "notes": null, "quotes": [{ "id": "q_…", "text": "…", "page": 12 }],
               "started": "2026-10-20", "finished": null, "rating": null,
               "olid": "OL…W", "cover": 123, "createdAt": "…" }]
 }
 ```
 
+- `domain` is optional: a book without one is general reading (Books tab and the Books card on Home); a book with
+  one also shows on that area's page.
 - `status`: `want`, `reading`, `read` or `dropped`. Changing it sets the dates: `reading` sets `started` (if empty),
   `read` and `dropped` set `finished`, `want` clears both. There is no page count.
 - `notes` are your own thoughts; `quotes` are lines from the book, each with an optional page. `rating`: 1-5.
@@ -156,8 +156,7 @@ compass tasks --due week              # also: --domain D, --cwd PATH, --due toda
 compass today --cwd "$PWD"            # what matters in the domain of this folder
 compass habit add "Stretch" --domain sport --freq mon,wed,fri   # or: daily, 3/week
 compass habit done stretch yesterday  # also: today (default), -N, YYYY-MM-DD
-compass domain edit reading --add-module books
-compass book add "A novel" --domain reading --find    # --find: author and cover from Open Library
+compass book add "A novel" --find    # --find: author and cover from Open Library; --domain D to file it in an area
 compass book reading novel
 compass book quote novel "A line worth keeping" --page 41
 compass help                          # every command (goals, sub-tasks, focus, edit…)

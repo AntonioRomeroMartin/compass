@@ -7,7 +7,6 @@ import { openHabitForm } from './modules/habits/view.js';
 import { renderHabitsView } from './views/habits.js';
 import { openBookForm } from './modules/books/view.js';
 import { renderBooksView } from './views/books.js';
-import { areasWith } from './modules/index.js';
 import { renderAreas, renderNavAreas } from './views/areas.js';
 import { openSettings } from './views/settings.js';
 import { renderHome } from './views/home.js';
@@ -31,8 +30,6 @@ function renderAll() {
   if (state.tab === 'areas') renderAreas();
   if (state.tab === 'habits') renderHabitsView();
   if (state.tab === 'books') renderBooksView();
-  // "Book" in the "+" sheets only once some area has the books module.
-  for (const b of document.querySelectorAll('[data-switch="book"]')) /** @type {HTMLElement} */ (b).hidden = !areasWith('books').length;
   if (state.tab === 'goals') {
     renderToolbar();
     renderList();

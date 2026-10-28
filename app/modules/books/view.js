@@ -78,9 +78,14 @@ export function bookGroups(list, areaOf = () => null) {
   return out;
 }
 
-/** The area a new book goes to when none is chosen: the first that lists the books module. */
-export function defaultBookArea() {
-  return domainsStore.current().domains.find((d) => d.modules?.includes('books'))?.id ?? '';
+/** Has any of these areas a book? (The Books block shows only where it has.) @param {Set<string>} ids */
+export const hasBooks = (ids) => booksStore.current().books.some((b) => b.domain && inAreas(ids, b.domain));
+
+/** The area's name for a book's chip ('' for general reading). @param {Book} b */
+export function areaName(b) {
+  if (!b.domain) return '';
+  const doms = domainsStore.current();
+  return domainsLib.label(doms, domainsLib.canonical(doms, b.domain) || b.domain) || b.domain;
 }
 
 // ---------------------------------------------------------------- the book's sheet
@@ -181,10 +186,9 @@ export function openBookForm(area = '', book) {
   showPicked();
   $('book-results').replaceChildren();
 
-  // Only the areas with the books module (and their sub-areas).
-  const withBooks = { ...doms, domains: doms.domains.filter((d) => domainsLib.modulesOf(doms, d.id).includes('books')) };
-  let domain = book ? domainsLib.canonical(doms, book.domain) || book.domain : area || defaultBookArea();
-  areaPicker($('book-areas'), withBooks, domain, (v) => { domain = v; });
+  // An area is optional: without one it is general reading (Books tab and Home only).
+  let domain = book ? (book.domain && (domainsLib.canonical(doms, book.domain) || book.domain)) ?? '' : area;
+  areaPicker($('book-areas'), doms, domain, (v) => { domain = v; }, { none: 'None' });
   /** @type {Status} */
   let status = 'want';
   $('book-status-pick').hidden = !!book;
@@ -238,8 +242,7 @@ export function openBookForm(area = '', book) {
     ev.preventDefault();
     const title = String(f.title.value).trim();
     if (!title) return f.title.focus();
-    if (!domain) { msg.textContent = 'Choose an area.'; return; }
-    const fields = { title, author: String(f.author.value).trim() || null, domain, olid: picked.olid, cover: picked.cover };
+    const fields = { title, author: String(f.author.value).trim() || null, domain: domain || null, olid: picked.olid, cover: picked.cover };
     if (book) dispatchBooks({ type: 'edit', id: book.id, fields });
     else {
       const b = booksLib.newBook(fields);
@@ -257,16 +260,25 @@ export function openBookForm(area = '', book) {
 /** Books of an area (and its sub-areas; those say which one). @param {import('../index.js').AreaScope} scope */
 export function areaSections({ id, ids, showSub }) {
   const doms = domainsStore.current();
-  const list = booksStore.current().books.filter((b) => inAreas(ids, b.domain));
+  const list = booksStore.current().books.filter((b) => b.domain && inAreas(ids, b.domain));
   return bookGroups(list, (b) => {
-    const own = domainsLib.canonical(doms, b.domain) || b.domain;
-    return showSub && own !== id ? domainsLib.find(doms, own)?.name ?? own : null;
+    const own = domainsLib.canonical(doms, /** @type {string} */ (b.domain)) || b.domain;
+    return showSub && own !== id ? domainsLib.find(doms, /** @type {string} */ (own))?.name ?? own : null;
   });
 }
 
-/** "2 reading · 5 read in 2026" and a line per book being read. @param {import('../index.js').AreaScope} scope */
-export function homeCard({ ids }) {
-  const list = booksStore.current().books.filter((b) => inAreas(ids, b.domain));
+/** An area's books on its Home card. @param {import('../index.js').AreaScope} scope */
+export const homeCard = ({ ids }) => readingSummary(booksStore.current().books.filter((b) => b.domain && inAreas(ids, b.domain)));
+
+/** The Books card on Home: every book, with or without an area. */
+export const booksHomeCard = () => readingSummary(booksStore.current().books);
+
+/**
+ * "2 reading · 5 read in 2026" and a line per book being read.
+ * @param {Book[]} list
+ * @returns {import('../index.js').HomeCard}
+ */
+function readingSummary(list) {
   const year = todayKey().slice(0, 4);
   const reading = list.filter((b) => b.status === 'reading');
   const read = list.filter((b) => b.status === 'read' && b.finished?.startsWith(year)).length;

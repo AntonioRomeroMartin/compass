@@ -64,11 +64,13 @@ export function chipPicker(box, items, value, onPick) {
 
 /**
  * Area chips of a sheet: parents followed by their sub-areas (smaller). An area that is not registered is kept as a chip.
+ * With `none`, a first chip for no area (value '').
  * @param {HTMLElement} box @param {import('../../lib/domains.js').DomainsDoc} doms @param {string} area @param {(v: string) => void} onPick
+ * @param {{ none?: string }} [opts]
  */
-export function areaPicker(box, doms, area, onPick) {
+export function areaPicker(box, doms, area, onPick, opts = {}) {
   /** @type {[string, string][]} */
-  const items = [];
+  const items = opts.none ? [['', opts.none]] : [];
   /** @param {string} parent */
   const walk = (parent) => {
     for (const d of doms.domains.filter((x) => (x.parent ?? '') === parent)) {

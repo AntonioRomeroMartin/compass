@@ -44,9 +44,6 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
  * @property {boolean} sync
  */
 
-/** Modules a domain can list in "modules". */
-const MODULE_NAMES = ['books'];
-
 const HELP = `compass — goals, tasks, habits, books and domains from the command line
 
 Usage:
@@ -74,18 +71,17 @@ Usage:
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
   compass books [--domain D | --cwd PATH] [--status S]
   compass book find "text"              search Open Library
-  compass book add "title" (--domain D | --cwd PATH) [--author A] [--status S] [--find]
+  compass book add "title" [--domain D | --cwd PATH] [--author A] [--status S] [--find]   (no domain: general reading)
                                         --find: author and cover from the first Open Library match
   compass book want|reading|read|dropped <book>   sets the dates: started on reading, finished on read/dropped
   compass book rate <book> 1-5|none
   compass book quote <book> "text" [--page N] | --remove <quote>
-  compass book edit <book> [--title T] [--author A] [--domain D] [--notes T] [--started DATE] [--finished DATE]
+  compass book edit <book> [--title T] [--author A] [--domain D|none] [--notes T] [--started DATE] [--finished DATE]
   compass book show <book>
   compass book delete <book> --yes
   compass domains
-  compass domain add <id> [--name N] [--parent P] [--path DIR…] [--module M…] [--color C]
+  compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
-                   [--add-module M…] [--remove-module M…]
   compass goals [--past|--archived|--all] [--category C]
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
                    [--target N] [--unit U] [--deadline YYYY-MM-DD]
@@ -100,8 +96,7 @@ Usage:
 
 <task>, <goal>: an id (t_…, g_…) or part of the title. D: a domain id or name. --cwd: the domain whose
 "paths" contain that folder (a subdomain also sees the dated items of its parents).
---path, --module and their --add-/--remove- forms can be repeated. M: a module besides tasks, goals and
-habits (${MODULE_NAMES.join(', ')}); sub-domains inherit their parents'. S: want, reading, read, dropped. DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
+--path, --add-path and --remove-path can be repeated. S: want, reading, read, dropped. DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
 weekdays, monthly, monthly:15, none. F (habits): daily, 3/week (any days), mon,thu.
 --no-sync skips git pull/push; --timeout S limits the pull (default 3 s for today, 20 s otherwise).
 Config: ~/.config/compass/config.json →
@@ -684,7 +679,7 @@ function listDomains(ctx) {
   const print = (d, depth) => {
     if (seen.has(d.id)) return;
     seen.add(d.id);
-    console.log(`${'  '.repeat(depth)}${d.id} — ${[d.name, ...(d.paths ?? []), ...(d.color ? [d.color] : []), ...(d.modules?.length ? [`+ ${d.modules.join(', ')}`] : [])].join(' · ')}`);
+    console.log(`${'  '.repeat(depth)}${d.id} — ${[d.name, ...(d.paths ?? []), ...(d.color ? [d.color] : [])].join(' · ')}`);
     for (const c of domains.children(doc, d.id)) print(c, depth + 1);
   };
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
@@ -715,8 +710,6 @@ function domain(ctx, sub, rest, flags, lists) {
     if (parent) d.parent = parent;
     const paths = [...new Set((lists.path ?? []).map((p) => domains.cleanPath(abs(p))))];
     if (paths.length) d.paths = paths;
-    const modules = [...new Set((lists.module ?? []).map(moduleName))];
-    if (modules.length) d.modules = modules;
     if (str(flags.color)) d.color = str(flags.color);
     ops = [{ type: 'add', domain: d }];
   } else if (sub === 'edit') {
@@ -726,8 +719,6 @@ function domain(ctx, sub, rest, flags, lists) {
     if (str(flags.name) || color) ops.push({ type: 'edit', id, fields: { ...(str(flags.name) ? { name: str(flags.name) } : {}), ...(color ? { color: orNull(color) } : {}) } });
     for (const p of lists['add-path'] ?? []) ops.push({ type: 'addPath', id, path: abs(p) });
     for (const p of lists['remove-path'] ?? []) ops.push({ type: 'removePath', id, path: abs(p) });
-    for (const m of lists['add-module'] ?? []) ops.push({ type: 'addModule', id, module: moduleName(m) });
-    for (const m of lists['remove-module'] ?? []) ops.push({ type: 'removeModule', id, module: m });
     if (!ops.length) fail('nothing to edit');
   } else {
     return fail(`unknown domain action “${sub}” (compass help)`);
@@ -850,13 +841,6 @@ function habit(ctx, sub, rest, flags) {
   if (saved) console.log(habitLine(saved, ctx));
 }
 
-/** A module name for a domain's "modules". @param {string} m */
-function moduleName(m) {
-  const name = m.trim().toLowerCase();
-  if (!MODULE_NAMES.includes(name)) fail(`unknown module “${m}” (${MODULE_NAMES.join(', ')})`);
-  return name;
-}
-
 /**
  * One line per book: status, author, rating, dates and domain.
  * @param {Book} b @param {{ domain?: boolean }} [opts]
@@ -869,7 +853,7 @@ function bookLine(b, opts = {}) {
   if (b.started || b.finished) bits.push([b.started ?? '?', b.finished ?? ''].join(' → ').replace(/ → $/, ''));
   if (b.quotes.length) bits.push(`${b.quotes.length} quote${b.quotes.length === 1 ? '' : 's'}`);
   if (b.notes) bits.push('notes');
-  if (opts.domain !== false) bits.push(b.domain);
+  if (opts.domain !== false && b.domain) bits.push(b.domain);
   return `${mark} [${b.id}] ${b.title} — ${bits.join(' · ')}`;
 }
 
@@ -892,7 +876,7 @@ function listBooks(ctx, flags) {
   const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
   const status = str(flags.status) ? attempt(() => books.parseStatus(/** @type {string} */ (str(flags.status)))) : null;
   const list = ctx.books.books
-    .filter((b) => (!own || own.has(domains.canonical(ctx.domains, b.domain))) && (!status || b.status === status))
+    .filter((b) => (!own || (b.domain && own.has(domains.canonical(ctx.domains, b.domain)))) && (!status || b.status === status))
     .sort(books.byStatus);
   if (!list.length) console.log('No books.');
   for (const b of list) console.log(bookLine(b));
@@ -943,13 +927,9 @@ async function book(ctx, sub, rest, flags) {
   }
   if (sub === 'add') {
     const title = rest[0] ?? str(flags.title);
-    if (!title) fail('book add needs a title: compass book add "title" --domain D');
-    const scope = scopeFrom(ctx, flags);
-    if (!scope.id) fail(scope.note ? `${scope.note}; use --domain` : 'a book needs a domain: --domain D (or --cwd PATH)');
-    const domain = /** @type {string} */ (scope.id);
-    if (ctx.domains.domains.length && !domains.modulesOf(ctx.domains, domain).includes('books')) {
-      console.error(`note: “${domain}” does not list the books module (compass domain edit ${domain} --add-module books)`);
-    }
+    if (!title) fail('book add needs a title: compass book add "title" [--domain D]');
+    // No domain (or a folder of none): general reading.
+    const domain = scopeFrom(ctx, flags).id;
     /** @type {Partial<Book>} */
     const fields = { author: orNull(str(flags.author)) };
     if (flags.find) {
@@ -999,7 +979,7 @@ async function book(ctx, sub, rest, flags) {
         const fields = {};
         if (str(flags.title)) fields.title = str(flags.title);
         if (str(flags.author) !== undefined) fields.author = orNull(str(flags.author));
-        if (str(flags.domain)) fields.domain = domainRef(ctx, /** @type {string} */ (str(flags.domain)));
+        if (str(flags.domain)) fields.domain = orNull(str(flags.domain)) === null ? null : domainRef(ctx, /** @type {string} */ (str(flags.domain)));
         if (str(flags.notes) !== undefined) fields.notes = orNull(str(flags.notes));
         for (const k of /** @type {const} */ (['started', 'finished'])) {
           if (str(flags[k]) !== undefined) fields[k] = attempt(() => tasks.parseDue(/** @type {string} */ (str(flags[k])), ctx.today));
