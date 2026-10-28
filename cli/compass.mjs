@@ -12,6 +12,8 @@ import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
 import * as habits from '../lib/habits.js';
 import * as books from '../lib/books.js';
+import * as journal from '../lib/journal.js';
+import * as cryptSync from './crypt.mjs';
 import { buildToday } from '../lib/today.js';
 import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, readJsonIfExists } from './repo.mjs';
 
@@ -26,6 +28,7 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
 /** @typedef {import('../lib/habits.js').HabitsDoc} HabitsDoc */
 /** @typedef {import('../lib/books.js').Book} Book */
 /** @typedef {import('../lib/books.js').BooksDoc} BooksDoc */
+/** @typedef {import('../lib/journal.js').JournalDoc} JournalDoc */
 /** @typedef {import('./repo.mjs').Config} Config */
 
 /**
@@ -44,7 +47,7 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks, habits, books and domains from the command line
+const HELP = `compass — goals, tasks, habits, books, journal and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
@@ -79,6 +82,13 @@ Usage:
   compass book edit <book> [--title T] [--author A] [--domain D|none] [--notes T] [--started DATE] [--finished DATE]
   compass book show <book>
   compass book delete <book> --yes
+  compass journal [DATE]                one day (default today); the journal is encrypted: the password
+                                        comes from $COMPASS_PASSPHRASE or the keyring (secret-tool)
+  compass journal days [--last N]       the last N days (default 7)
+  compass journal search "text"
+  compass journal write "text" [--date DATE]   replaces that day's text ("none" clears it)
+  compass journal note "text" [--date DATE]    adds a note with the time
+  compass journal unnote <note> [--date DATE]
   compass domains
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
@@ -374,6 +384,7 @@ async function main() {
     case 'habit': return habit(ctx, sub, rest, flags);
     case 'books': return listBooks(ctx, flags);
     case 'book': return book(ctx, sub, rest, flags);
+    case 'journal': return journalCmd(ctx, sub, rest, flags);
     default: fail(`unknown command “${cmd}” (compass help)`);
   }
 }
@@ -1021,6 +1032,114 @@ async function book(ctx, sub, rest, flags) {
   report(res, ctx.sync);
   const saved = books.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.books)).books.find((x) => x.id === id);
   if (saved) console.log(bookLine(saved));
+}
+
+/** The passphrase of this computer, or an error that says how to set it. */
+function needPassphrase() {
+  const pass = cryptSync.passphrase();
+  if (!pass) fail('no encryption password on this computer. Store it (it asks for it) with:\n  secret-tool store --label="compass encryption" service compass key encryption');
+  return pass;
+}
+
+/**
+ * The journal as it is in the repo, opened.
+ * @param {Ctx} ctx @param {string} pass
+ * @returns {JournalDoc}
+ */
+function readJournal(ctx, pass) {
+  const raw = readJsonIfExists(ctx.cfg, ctx.cfg.journal);
+  if (!raw) return journal.emptyDoc(ctx.tz);
+  if (!cryptSync.isSealed(raw)) fail(`${ctx.cfg.journal} is not sealed; the journal is only kept encrypted`);
+  return journal.normalize(JSON.parse(attempt(() => cryptSync.openSync(raw, pass)).text));
+}
+
+/** "21:05" in the data's zone. @param {string} iso @param {Ctx} ctx */
+const timeOf = (iso, ctx) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: ctx.tz });
+
+/** @param {import('../lib/journal.js').Day} d @param {Ctx} ctx */
+function printDay(d, ctx) {
+  console.log(`# ${d.date}`);
+  if (d.text) console.log(d.text);
+  for (const n of d.notes) console.log(`- ${timeOf(n.at, ctx)} ${n.text} [${n.id}]`);
+  if (!d.text && !d.notes.length) console.log('(nothing written)');
+}
+
+/**
+ * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
+ * @param {Record<string, string | true>} flags
+ */
+function journalCmd(ctx, sub, rest, flags) {
+  const pass = needPassphrase();
+  const doc = readJournal(ctx, pass);
+  /** @param {string|undefined} raw */
+  const day = (raw) => {
+    if (!raw) return ctx.today;
+    const text = raw.trim().toLowerCase();
+    const back = /^-(\d+)$/.exec(text);
+    const date = text === 'yesterday' ? addDays(ctx.today, -1) : back ? addDays(ctx.today, -Number(back[1])) : attempt(() => tasks.parseDue(text, ctx.today));
+    if (!date) fail('which day? (today, yesterday, -N or YYYY-MM-DD)');
+    if (date > ctx.today) fail(`${date} has not come yet`);
+    return date;
+  };
+  /** @type {journal.Op[]} */
+  let ops;
+  switch (sub) {
+    case undefined:
+    case 'show':
+      return printDay(journal.dayOf(doc, day(sub === 'show' ? rest[0] : undefined)), ctx);
+    case 'days': {
+      const n = str(flags.last) ? positive(/** @type {string} */ (str(flags.last)), '--last') : 7;
+      const from = addDays(ctx.today, 1 - n);
+      const list = doc.days.filter((d) => d.date >= from);
+      if (!list.length) console.log(`Nothing written in the last ${n} days.`);
+      list.forEach((d, i) => { if (i) console.log(''); printDay(d, ctx); });
+      return;
+    }
+    case 'search': {
+      const q = rest.join(' ').trim();
+      if (!q) fail('search for what? compass journal search "word"');
+      const list = journal.search(doc, q);
+      if (!list.length) console.log('Nothing found.');
+      list.forEach((d, i) => { if (i) console.log(''); printDay(d, ctx); });
+      return;
+    }
+    case 'write': {
+      const text = rest[0];
+      if (text === undefined) fail('write what? compass journal write "text" [--date D] (replaces that day\'s text; "none" clears it)');
+      ops = [{ type: 'setText', date: day(str(flags.date)), text: orNull(text) }];
+      break;
+    }
+    case 'note': {
+      const text = rest[0]?.trim();
+      if (!text) fail('which note? compass journal note "text" [--date D]');
+      ops = [{ type: 'addNote', date: day(str(flags.date)), note: journal.newNote(text, ctx.now) }];
+      break;
+    }
+    case 'unnote': {
+      const date = day(str(flags.date));
+      if (!journal.dayOf(doc, date).notes.some((n) => n.id === rest[0])) fail(`${date} has no note ${rest[0] ?? '?'} (compass journal ${date})`);
+      ops = [{ type: 'removeNote', date, id: /** @type {string} */ (rest[0]) }];
+      break;
+    }
+    default:
+      // A date on its own: show that day.
+      if (/^(\d{4}-\d{2}-\d{2}|today|yesterday|-\d+)$/.test(sub)) return printDay(journal.dayOf(doc, day(sub)), ctx);
+      return fail(`unknown journal action “${sub}” (compass help)`);
+  }
+  const res = commitChange(ctx.cfg, ctx.cfg.journal, (raw) => {
+    let salt = null;
+    let before = journal.emptyDoc(ctx.tz);
+    if (raw) {
+      if (!cryptSync.isSealed(raw)) fail(`${ctx.cfg.journal} is not sealed`);
+      const opened = attempt(() => cryptSync.openSync(raw, pass));
+      salt = opened.salt;
+      before = journal.normalize(JSON.parse(opened.text));
+    }
+    const after = journal.applyOps(before, ops);
+    if (journal.serialize(after) === journal.serialize(before)) return null;
+    return { text: cryptSync.sealSync(journal.serialize(after), pass, salt), message: journal.commitMessage(ops) };
+  }, { sync: ctx.sync });
+  report(res, ctx.sync);
 }
 
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
