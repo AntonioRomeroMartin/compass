@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://api.github.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://covers.openlibrary.org https://archive.org https://*.archive.org; connect-src https://api.github.com https://openlibrary.org; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#17171a" media="(prefers-color-scheme: dark)">
@@ -26,6 +26,7 @@
     <button id="add" class="tab-add" aria-label="New"><span class="ico" aria-hidden="true">+</span><span>New</span></button>
     <button data-tab="goals"><span class="ico" aria-hidden="true">◇</span><span>Goals</span></button>
     <button data-tab="habits"><span class="ico" aria-hidden="true">✓</span><span>Habits</span></button>
+    <button data-tab="books"><span class="ico" aria-hidden="true">❐</span><span>Books</span></button>
     <button data-tab="more"><span class="ico" aria-hidden="true">⋯</span><span>More</span></button>
   </nav>
 
@@ -70,6 +71,8 @@
 
     <section id="view-habits" data-view-of="habits" hidden></section>
 
+    <section id="view-books" data-view-of="books" hidden></section>
+
     <section id="view-more" data-view-of="more" hidden>
       <ul class="menu">
         <li><button id="settings" class="menu-item">GitHub connection<span class="hint">Token, repo and data files</span></button></li>
@@ -86,6 +89,7 @@
           <button type="button" aria-pressed="true">Task</button>
           <button type="button" data-switch="goal" aria-pressed="false">Goal</button>
           <button type="button" data-switch="habit" aria-pressed="false">Habit</button>
+          <button type="button" data-switch="book" aria-pressed="false">Book</button>
         </div>
       </div>
       <input name="title" required maxlength="160" autocomplete="off" placeholder="What needs doing?" aria-label="Title" class="big">
@@ -145,6 +149,7 @@
           <button type="button" data-switch="task" aria-pressed="false">Task</button>
           <button type="button" aria-pressed="true">Goal</button>
           <button type="button" data-switch="habit" aria-pressed="false">Habit</button>
+          <button type="button" data-switch="book" aria-pressed="false">Book</button>
         </div>
       </div>
       <label>Title
@@ -208,6 +213,7 @@
           <button type="button" data-switch="task" aria-pressed="false">Task</button>
           <button type="button" data-switch="goal" aria-pressed="false">Goal</button>
           <button type="button" aria-pressed="true">Habit</button>
+          <button type="button" data-switch="book" aria-pressed="false">Book</button>
         </div>
       </div>
       <input name="title" required maxlength="120" autocomplete="off" placeholder="What do you want to keep doing?" aria-label="Title" class="big">
@@ -249,6 +255,78 @@
     </div>
   </dialog>
 
+  <dialog id="book-form-dialog" class="sheet">
+    <form id="book-form" novalidate>
+      <div class="sheet-head">
+        <h2 id="book-form-title">New book</h2>
+        <div class="segmented kind-switch" role="group" aria-label="Kind">
+          <button type="button" data-switch="task" aria-pressed="false">Task</button>
+          <button type="button" data-switch="goal" aria-pressed="false">Goal</button>
+          <button type="button" data-switch="habit" aria-pressed="false">Habit</button>
+          <button type="button" aria-pressed="true">Book</button>
+        </div>
+      </div>
+      <div class="search-row">
+        <input name="query" type="search" maxlength="120" autocomplete="off" placeholder="Search Open Library: title or author" aria-label="Search Open Library">
+        <button type="button" id="book-search" class="btn">Search</button>
+      </div>
+      <ul id="book-results" class="results"></ul>
+      <input name="title" required maxlength="200" autocomplete="off" placeholder="Title" aria-label="Title" class="big">
+      <div class="two">
+        <input name="author" maxlength="120" autocomplete="off" placeholder="Author" aria-label="Author">
+        <input name="pages" type="number" min="1" inputmode="numeric" placeholder="Pages" aria-label="Pages">
+      </div>
+      <div id="book-picked" class="picked"></div>
+      <fieldset class="pick">
+        <legend>Area</legend>
+        <div id="book-areas" class="chip-pick" role="radiogroup" aria-label="Area"></div>
+      </fieldset>
+      <fieldset class="pick" id="book-status-pick">
+        <legend>Status</legend>
+        <div id="book-status-new" class="chip-pick" role="radiogroup" aria-label="Status"></div>
+      </fieldset>
+      <p id="book-msg" class="msg" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <div id="book-form-extra" class="extra"></div>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="book-submit">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="book-dialog" class="sheet">
+    <div class="dialog-body">
+      <div class="book-head">
+        <div id="book-cover"></div>
+        <div>
+          <h2 id="book-title"></h2>
+          <p id="book-author" class="hint"></p>
+          <p id="book-dates" class="hint"></p>
+        </div>
+      </div>
+      <div id="book-status" class="chip-pick" role="radiogroup" aria-label="Status"></div>
+      <div id="book-page-box" class="page-box">
+        <label>Page <input id="book-page" type="number" min="0" inputmode="numeric" aria-label="Current page"></label>
+        <span id="book-of" class="hint"></span>
+        <div id="book-page-bar"></div>
+      </div>
+      <div id="book-rating" class="rating" role="group" aria-label="Rating"></div>
+      <label>Notes
+        <textarea id="book-notes" rows="3" maxlength="5000" placeholder="What you think of it…"></textarea>
+      </label>
+      <h3 class="quotes-head">Quotes</h3>
+      <ul id="book-quotes" class="quotes"></ul>
+      <form id="quote-form" class="quote-form" novalidate>
+        <textarea name="text" rows="2" maxlength="2000" placeholder="A line worth keeping" aria-label="Quote"></textarea>
+        <div class="quote-add">
+          <input name="page" type="number" min="1" inputmode="numeric" placeholder="Page" aria-label="Page of the quote">
+          <button type="submit" class="btn">Add quote</button>
+        </div>
+      </form>
+      <div class="actions"><div id="book-extra" class="extra"></div><button type="button" class="btn primary" data-close>Done</button></div>
+    </div>
+  </dialog>
+
   <dialog id="manage-dialog">
     <div class="dialog-body">
       <h2>Categories</h2>
@@ -274,7 +352,7 @@
         Create a <em>fine-grained</em> token with access to that repo only and the
         <em>Contents: Read and write</em> permission. The token is stored only in this browser; this site has
         no server and only talks to <code>api.github.com</code>. If the file doesn't exist, the app offers to create it.
-        Tasks, areas and habits live next to it (<code>tasks.json</code>, <code>domains.json</code>, <code>habits.json</code>).</p>
+        Tasks, areas, habits and books live next to it (<code>tasks.json</code>, <code>domains.json</code>, <code>habits.json</code>, <code>books.json</code>).</p>
       <label>GitHub token
         <input name="token" type="password" required autocomplete="off" spellcheck="false" placeholder="github_pat_…">
       </label>

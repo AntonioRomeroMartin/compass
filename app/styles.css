@@ -290,7 +290,7 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 details.sub-group > summary h3::before { content: "▸"; font-size: .8em; }
 details.sub-group[open] > summary h3::before { content: "▾"; }
 
-/* phone: "More" lives in the header's ⚙, so the bottom bar keeps six buttons */
+/* phone: "More" lives in the header's ⚙, so the bottom bar keeps seven buttons */
 @media (max-width: 899px) {
   .tabs [data-tab="more"] { display: none; }
   #open-more[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
@@ -315,3 +315,46 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
 .task.habit input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
 .task.habit input[type="checkbox"]:checked::after { content: "✓"; color: var(--bg); font-size: .75rem; font-weight: 700; }
 .task.habit input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+
+/* books: rows with a small cover, the book's sheet, the Open Library search */
+.cover { display: block; flex: none; border-radius: 3px; object-fit: cover; background: var(--border); }
+.cover-s { width: 34px; height: 50px; }
+.cover-m { width: 84px; height: 126px; border-radius: 5px; }
+.cover.blank { border: 1px solid var(--border); background: var(--accent-soft); }
+.book-row { border-bottom: 1px solid var(--border); }
+.book-row:last-child { border-bottom: 0; }
+.book-open { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; background: none; border: 0; text-align: left; font: inherit; color: inherit; }
+.book-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.book-title { overflow-wrap: anywhere; }
+.book-text .hint { font-size: .82rem; }
+.book-progress { display: flex; align-items: center; gap: 8px; }
+.book-progress .bar { flex: 1; max-width: 160px; height: 6px; }
+.stars { color: var(--warn); letter-spacing: 1px; font-size: .85rem; white-space: nowrap; }
+.stars .off { color: var(--border); }
+.book-head { display: flex; gap: 14px; align-items: flex-start; }
+.book-head h2 { margin: 0 0 4px; }
+.book-head p { margin: 0 0 2px; }
+.page-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.page-box label { display: flex; align-items: center; gap: 8px; }
+.page-box input { width: 90px; }
+.page-box > div { flex-basis: 100%; }
+.page-box[hidden] { display: none; }
+.rating { display: flex; gap: 2px; }
+.star { background: none; border: 0; padding: 2px 4px; font-size: 1.5rem; line-height: 1; color: var(--border); }
+.star.on { color: var(--warn); }
+.quotes-head { margin: 6px 0 0; font-size: .95rem; }
+.quotes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.quotes:empty { display: none; }
+.quotes li { display: flex; gap: 10px; align-items: flex-start; }
+.quotes blockquote { flex: 1; margin: 0; padding-left: 10px; border-left: 3px solid var(--accent); white-space: pre-wrap; overflow-wrap: anywhere; font-style: italic; }
+.quote-form { display: grid; gap: 6px; padding: 0; }
+.quote-add { display: flex; gap: 8px; }
+.quote-add input { width: 90px; }
+.search-row { display: flex; gap: 8px; }
+.search-row input { flex: 1; min-width: 0; }
+.results { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+.results:empty { display: none; }
+.result { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px; background: none; border: 1px solid transparent; border-radius: 8px; text-align: left; font: inherit; color: inherit; }
+.result:hover { border-color: var(--border); background: var(--bg); }
+.picked { display: flex; align-items: center; gap: 10px; }
+.picked:empty { display: none; }

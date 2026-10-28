@@ -4,13 +4,14 @@ import * as goalsLib from '../../lib/goals.js';
 import * as tasksLib from '../../lib/tasks.js';
 import * as domainsLib from '../../lib/domains.js';
 import * as habitsLib from '../../lib/habits.js';
+import * as booksLib from '../../lib/books.js';
 import { createStore } from './store.js';
 import { lsSet } from './ui.js';
 import { emptyDoc } from '../../lib/goals.js';
 import { deviceTimeZone, isValidTimeZone, periodKey } from '../../lib/period.js';
 
 /** @typedef {import('../../lib/github.js').RepoConfig} RepoConfig */
-/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'more'} Tab */
+/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'books'|'more'} Tab */
 
 // localStorage keys keep the "goals." prefix of the first version, so existing devices keep their settings.
 export const LS = { cfg: 'goals.cfg', ui: 'goals.ui', theme: 'compass.theme' };
@@ -51,7 +52,9 @@ export const domainsStore = createStore({ mod: domainsLib, file: 'domains.json',
 
 export const habitsStore = createStore({ mod: habitsLib, file: 'habits.json', ls: 'compass.habits', empty: () => habitsLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
 
-export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore];
+export const booksStore = createStore({ mod: booksLib, file: 'books.json', ls: 'compass.books', empty: () => booksLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
+
+export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksStore];
 
 export const current = () => goalsStore.current();
 
@@ -82,6 +85,12 @@ export function dispatchGoals(...ops) {
 export function dispatchHabits(...ops) {
   if (!canEdit() || !ops.length) return;
   habitsStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/books.js').Op} ops */
+export function dispatchBooks(...ops) {
+  if (!canEdit() || !ops.length) return;
+  booksStore.dispatch(ops);
 }
 
 /** Civil date of today in the data's time zone. */

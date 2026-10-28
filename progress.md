@@ -1,17 +1,29 @@
 # Progress — compass
 
 ## Current status
-- Version 2.8 (phase 3 in progress): the app is a dashboard with Home (one card per area), Today (overdue, today
+- Version 2.9 (phase 4 started: books): the app is a dashboard with Home (one card per area), Today (overdue, today
   and the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and separate
   Tasks and Goals blocks) and a quick task sheet; split into `app/core/`, `app/modules/` (tasks, goals) and
   `app/views/`. Tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags.
   Goals no longer repeat (habits will be a module of their own) and keep one progress number; tasks do not link to goals; `task add --stdin` adds several in one commit.
-  Habits (`habits.json`): model, CLI and app done. 57 tests.
+  Habits (`habits.json`): model, CLI and app done. Books (`books.json`): first module of its own, only in the
+  areas that list it in `domains.json` (`modules`, inherited by sub-areas). 64 tests.
 - Next (rest of phase 3): offline editing (local queue; offline is read-only today), managing areas from the app
-  (create, rename, reorder), choosing modules per area in `domains.json` (first: later modules depend on it). Deferred: day close and Focus in the app (the CLI still supports focus).
-- Later phases: 4 journal and books · 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
+  (create, rename, reorder). Deferred: day close and Focus in the app (the CLI still supports focus).
+- Next module: journal (phase 4). Later phases: 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
 
 ## Sessions (most recent first)
+- 2026-10-28 · v2.9 (books, phase 4): modules per area: `domains.json` `modules` (inherited by sub-areas;
+  `domains.modulesOf`, ops `addModule`/`removeModule`, `domain add --module`, `domain edit --add-module/--remove-module`);
+  the app's registry shows tasks, goals and habits everywhere and other modules only where listed. `lib/books.js`
+  (books.json: status want/reading/read/dropped that sets started/finished, page/pages, rating, notes, quotes, Open
+  Library `olid` and `cover` id; Open Library search) and the CLI (`compass books`, `compass book
+  find|add|want|reading|read|dropped|page|rate|quote|edit|show|delete`, `add --find`). App: Books tab (bar of seven
+  on the phone), rows with a small cover grouped by status (read before this year and dropped, folded), the book's
+  sheet (status, page with a bar, stars, notes, quotes), the new/edit sheet with the Open Library search (areas with
+  the module only), a Books block on the area's page and its Home card ("reading", "read in YYYY", page bars). CSP:
+  `openlibrary.org` (connect) and the covers' hosts (img). `sw.js` v10. Checked in the browser with a fake GitHub
+  (desktop and phone; real Open Library search and covers). 64 tests. Next: journal.
 - 2026-10-28 · v2.8 (CLI): `domain add --path` and `domain edit --add-path/--remove-path` can be repeated (only the
   last value was kept; repeated flags are now also collected by `parse`), and `task add/edit --location` (shown as
   `@ place`; `none` clears it). Next: modules per area in `domains.json`. 57 tests.

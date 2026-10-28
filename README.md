@@ -1,6 +1,6 @@
 # Compass
 
-A static PWA to track **tasks**, **habits** and **goals** (by horizon: daily to yearly, or with a deadline) across **domains** (areas such as work, sport or studies), plus a command line (`compass`) that works on the same data and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
+A static PWA to track **tasks**, **habits**, **goals** (by horizon: daily to yearly, or with a deadline) and **books** across **domains** (areas such as work, sport or studies), plus a command line (`compass`) that works on the same data and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
 
 ## How to use it
 
@@ -14,13 +14,15 @@ A static PWA to track **tasks**, **habits** and **goals** (by horizon: daily to 
 
 ## Privacy
 
-- The site has no server: your browser talks only to `api.github.com` (strict CSP, no third-party scripts).
+- The site has no server: your browser talks only to `api.github.com` (strict CSP, no third-party scripts), plus
+  Open Library for books: `openlibrary.org` when you search for one, and its cover images (served from
+  `covers.openlibrary.org` and `archive.org`). Open Library sees those searches and which covers are shown.
 - The token and a copy of your data are stored only in your browser's local storage.
 - This repo contains code only: no categories, goals or anyone's data.
 
 ## Data format
 
-Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `domains.json`), saved with
+Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `books.json`, `domains.json`), saved with
 2-space indentation so diffs stay readable. Commits that change data start with the file's prefix (`goals:`,
 `tasks:`, `domains:`).
 
@@ -54,7 +56,8 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   "domains": [
     { "id": "studies", "name": "Studies", "paths": ["~/projects/studies"], "color": "#3366aa" },
     { "id": "studies/course-a", "name": "Course A", "parent": "studies", "paths": ["~/projects/studies/course-a"] },
-    { "id": "sport", "name": "Sport" }
+    { "id": "sport", "name": "Sport" },
+    { "id": "reading", "name": "Reading", "modules": ["books"] }
   ]
 }
 ```
@@ -64,6 +67,9 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - **Domains and goal categories are one list**: a goal's `category` is the id or the name of a domain
   (`Sport` and `sport` both match the `sport` domain). Categories that are not registered keep working as
   plain labels, and `compass domains` lists them so they can be registered. Nothing needs migrating.
+- **Modules:** tasks, goals and habits belong to every domain. Other modules (for now `books`) belong only to the
+  domains that list them in `modules`, and to their subdomains, which inherit them: their block shows on that
+  area's page and on its card on Home.
 - A folder belongs to the domain with the **longest** path that contains it (`~/projects/studies/course-a/week-3`
   → `studies/course-a`; whole folder names only). A view scoped to a domain shows that domain and its subdomains
   in full, plus the dated items of its parents (a course sees the deadlines of its degree, not its siblings' tasks).
@@ -109,6 +115,24 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - Any past day can be marked or unmarked from the habit's month calendar. `archived: true` retires it and keeps
   its history.
 
+### Books (`books.json`)
+
+```json
+{
+  "version": 1,
+  "timeZone": "Area/City",
+  "books": [{ "id": "b_…", "title": "…", "author": "…", "domain": "reading", "status": "reading",
+              "notes": null, "quotes": [{ "id": "q_…", "text": "…", "page": 12 }],
+              "started": "2026-10-20", "finished": null, "rating": null, "page": 60, "pages": 96,
+              "olid": "OL…W", "cover": 123, "createdAt": "…" }]
+}
+```
+
+- `status`: `want`, `reading`, `read` or `dropped`. Changing it sets the dates: `reading` sets `started` (if empty),
+  `read` and `dropped` set `finished`, `want` clears both; a book that is `read` is on its last page.
+- `notes` are your own thoughts; `quotes` are lines from the book, each with an optional page. `rating`: 1-5.
+- `olid` and `cover` come from an Open Library search: only the cover's id is stored, the image is not.
+
 ## Command line
 
 `cli/compass.mjs` reads and changes the same data from a local git checkout of your data repo, with the same
@@ -132,6 +156,10 @@ compass tasks --due week              # also: --domain D, --cwd PATH, --due toda
 compass today --cwd "$PWD"            # what matters in the domain of this folder
 compass habit add "Stretch" --domain sport --freq mon,wed,fri   # or: daily, 3/week
 compass habit done stretch yesterday  # also: today (default), -N, YYYY-MM-DD
+compass domain edit reading --add-module books
+compass book add "A novel" --domain reading --find    # --find: author, pages and cover from Open Library
+compass book reading novel && compass book page novel 40
+compass book quote novel "A line worth keeping" --page 41
 compass help                          # every command (goals, sub-tasks, focus, edit…)
 ```
 
