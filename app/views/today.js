@@ -9,6 +9,7 @@ import { activeHabits, habitRow } from '../modules/habits/view.js';
 import { isDueOn } from '../../lib/habits.js';
 import { byArea } from './habits.js';
 import { buildToday } from '../../lib/today.js';
+import { todaySection } from '../modules/journal/view.js';
 
 /** @typedef {import('../../lib/tasks.js').Task} Task */
 
@@ -67,4 +68,5 @@ export function renderTodayView() {
     details.addEventListener('toggle', () => { state.undatedOpen = /** @type {HTMLDetailsElement} */ (details).open; persist(); });
     view.append(details);
   }
+  view.append(todaySection());
 }

@@ -73,10 +73,14 @@
 
     <section id="view-books" data-view-of="books" hidden></section>
 
+    <section id="view-journal" data-view-of="journal" hidden></section>
+
     <section id="view-more" data-view-of="more" hidden>
       <ul class="menu">
         <li><button id="settings" class="menu-item">GitHub connection<span class="hint">Token, repo and data files</span></button></li>
         <li><button id="open-manage" class="menu-item">Categories and time zone<span class="hint">Goal categories, periods</span></button></li>
+        <li><button id="open-journal" class="menu-item">Journal<span class="hint">Every day, and search</span></button></li>
+        <li><button id="open-passphrase" class="menu-item">Encryption password<span class="hint">Opens the journal on this device</span></button></li>
       </ul>
     </section>
   </div>
@@ -335,6 +339,25 @@
       </form>
       <div class="actions"><div class="extra"></div><button type="button" class="btn primary" data-close>Done</button></div>
     </div>
+  </dialog>
+
+  <dialog id="passphrase-dialog">
+    <form id="passphrase-form" novalidate>
+      <h2>Encryption password</h2>
+      <p class="hint">The journal is encrypted on this device with this password before it reaches GitHub. Use the same
+        one on every device and keep it in your password manager: <strong>if it is lost, the journal cannot be
+        recovered</strong>. It is remembered on this device only.</p>
+      <p id="passphrase-state" class="msg" role="status" aria-live="polite"></p>
+      <div class="search-row">
+        <input name="pass" type="password" autocomplete="off" minlength="8" placeholder="Encryption password" aria-label="Encryption password">
+        <button type="button" id="passphrase-show" class="btn">Show</button>
+      </div>
+      <div class="actions">
+        <div class="extra"><button type="button" id="passphrase-forget" class="link danger">Forget on this device</button></div>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="settings-dialog">
