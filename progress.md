@@ -11,7 +11,7 @@
 - Books (`books.json`): status (want/reading/read/dropped) that sets the start and finish dates, rating, notes, quotes,
   Open Library search and cover id; no page count; the area is optional (none = general reading). CLI
   `compass book…`; app: Books tab, a block on the page of areas with books, and a Books card on Home.
-- Journal (`journal.json`): one text per day plus notes with the time; sealed with the user's encryption password
+- Journal (`journal.json`): one text per day plus notes; sealed with the user's encryption password
   (`lib/crypt.js`: AES-256-GCM, PBKDF2-SHA256; WebCrypto in the app, node:crypto in `cli/crypt.mjs`, same format).
   The app keeps the password per device (More → Encryption password) and shows the journal at the end of Today and
   on its page; the CLI takes it from $COMPASS_PASSPHRASE or the keyring (secret-tool). Commit messages name only days.
