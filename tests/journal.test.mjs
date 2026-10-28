@@ -6,12 +6,12 @@ import * as crypt from '../lib/crypt.js';
 import { openSync, sealSync } from '../cli/crypt.mjs';
 
 test('journal: text and notes per day, empty days dropped, latest first', () => {
-  const n1 = { id: 'n1', at: '2026-03-02T21:00:00Z', text: 'late' };
-  const n0 = { id: 'n0', at: '2026-03-02T08:00:00Z', text: 'early' };
+  const n0 = { id: 'n0', text: 'early' };
+  const n1 = { id: 'n1', text: 'late' };
   let doc = journal.applyOps(journal.emptyDoc('UTC'), [
     { type: 'setText', date: '2026-03-01', text: 'First day.' },
-    { type: 'addNote', date: '2026-03-02', note: n1 },
     { type: 'addNote', date: '2026-03-02', note: n0 },
+    { type: 'addNote', date: '2026-03-02', note: n1 },
     { type: 'addNote', date: '2026-03-02', note: n0 },
   ]);
   assert.deepEqual(doc.days.map((d) => d.date), ['2026-03-02', '2026-03-01']);
@@ -26,7 +26,7 @@ test('journal: text and notes per day, empty days dropped, latest first', () => 
 });
 
 test('journal commit messages name the days, never the text', () => {
-  const msg = journal.commitMessage([{ type: 'addNote', date: '2026-03-02', note: { id: 'n', at: '', text: 'secret' } }]);
+  const msg = journal.commitMessage([{ type: 'addNote', date: '2026-03-02', note: { id: 'n', text: 'secret' } }]);
   assert.equal(msg, 'journal: note 2026-03-02');
   assert.equal(journal.commitMessage([{ type: 'setText', date: '2026-03-02', text: 'secret' }, { type: 'setText', date: '2026-03-01', text: 'x' }]), 'journal: entry 2026-03-01, 2026-03-02');
 });

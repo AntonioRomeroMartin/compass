@@ -16,7 +16,7 @@ test('journal: write, notes, show, days and search; the file in the repo is seal
     run('journal', 'note', 'Called home');
     run('journal', 'write', 'Earlier day.', '--date', 'yesterday');
     const today = run('journal');
-    assert.match(today, /A quiet day by the sea\.\n- \d{2}:\d{2} Called home \[n_\w+\]\n$/);
+    assert.match(today, /A quiet day by the sea\.\n- Called home \[n_\w+\]\n$/);
     assert.match(run('journal', 'days', '--last', '2'), /# .*\nA quiet day.*\n- .*\n\n# .*\nEarlier day\.\n$/);
     assert.match(run('journal', 'search', 'sea'), /quiet day/);
     assert.doesNotMatch(run('journal', 'search', 'sea'), /Earlier/);

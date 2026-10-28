@@ -145,13 +145,13 @@ Once opened with the password, the file is:
 {
   "version": 1,
   "timeZone": "Area/City",
-  "days": [{ "date": "2026-10-28", "text": "…", "notes": [{ "id": "n_…", "at": "2026-10-28T19:05:00Z", "text": "…" }] }]
+  "days": [{ "date": "2026-10-28", "text": "…", "notes": [{ "id": "n_…", "text": "…" }] }]
 }
 ```
 
 In the repo it is stored sealed (`lib/crypt.js`):
 `{ "version": 1, "sealed": "AES-256-GCM", "kdf": { "name": "PBKDF2-SHA256", "iterations": 600000, "salt": "…" }, "iv": "…", "data": "…" }`.
-One entry per day (its text) plus short notes with the time; days with nothing are not kept.
+One entry per day (its text) plus short notes; days with nothing are not kept.
 
 ## Command line
 

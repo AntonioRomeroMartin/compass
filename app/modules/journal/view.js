@@ -1,9 +1,9 @@
 // @ts-check
-// Journal (app side): a day's editor (its text and its notes with the time), used at the end of Today and on the
+// Journal (app side): a day's editor (its text and its notes), used at the end of Today and on the
 // Journal page; that page (one day at a time, the other days below, search); and the encryption password of this
 // device, without which the journal is neither read nor written.
 import * as journalLib from '../../../lib/journal.js';
-import { canEdit, dispatchJournal, journalStore, passphrase, persist, render, setPassphrase, state, todayKey, tz } from '../../core/data.js';
+import { canEdit, dispatchJournal, journalStore, passphrase, persist, render, setPassphrase, state, todayKey } from '../../core/data.js';
 import { $, h } from '../../core/ui.js';
 import { addDays } from '../../../lib/period.js';
 
@@ -11,9 +11,6 @@ import { addDays } from '../../../lib/period.js';
 
 /** Text being typed, by day, until it is saved (a redraw meanwhile keeps it). @type {Map<string, string>} */
 const drafts = new Map();
-
-/** "21:05" in the data's zone. @param {string} iso */
-const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz() });
 
 /** "Wednesday 28 October". @param {string} date */
 export const dayLabel = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
@@ -39,7 +36,7 @@ function lockedBlock() {
 }
 
 /**
- * Editor of one day: its text (saved when you leave the field) and its notes with the time, oldest first.
+ * Editor of one day: its text (saved when you leave the field) and its notes, oldest first.
  * The ids let a redraw put the cursor back where it was.
  * @param {string} date
  */
@@ -81,7 +78,6 @@ export function dayEditor(date) {
     day.notes.length ? h('ul', { class: 'journal-notes' }, ...day.notes.map((n) => h(
       'li',
       {},
-      h('span', { class: 'hint time' }, timeOf(n.at)),
       h('span', { class: 'note-text' }, n.text),
       h('button', { type: 'button', class: 'link danger', disabled: !edit, 'aria-label': 'Remove note', onclick: () => {
         if (confirm('Remove this note?')) dispatchJournal({ type: 'removeNote', date, id: n.id });

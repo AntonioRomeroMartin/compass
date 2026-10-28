@@ -87,7 +87,7 @@ Usage:
   compass journal days [--last N]       the last N days (default 7)
   compass journal search "text"
   compass journal write "text" [--date DATE]   replaces that day's text ("none" clears it)
-  compass journal note "text" [--date DATE]    adds a note with the time
+  compass journal note "text" [--date DATE]    adds a note
   compass journal unnote <note> [--date DATE]
   compass domains
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
@@ -1053,14 +1053,11 @@ function readJournal(ctx, pass) {
   return journal.normalize(JSON.parse(attempt(() => cryptSync.openSync(raw, pass)).text));
 }
 
-/** "21:05" in the data's zone. @param {string} iso @param {Ctx} ctx */
-const timeOf = (iso, ctx) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: ctx.tz });
-
-/** @param {import('../lib/journal.js').Day} d @param {Ctx} ctx */
-function printDay(d, ctx) {
+/** @param {import('../lib/journal.js').Day} d */
+function printDay(d) {
   console.log(`# ${d.date}`);
   if (d.text) console.log(d.text);
-  for (const n of d.notes) console.log(`- ${timeOf(n.at, ctx)} ${n.text} [${n.id}]`);
+  for (const n of d.notes) console.log(`- ${n.text} [${n.id}]`);
   if (!d.text && !d.notes.length) console.log('(nothing written)');
 }
 
@@ -1086,13 +1083,13 @@ function journalCmd(ctx, sub, rest, flags) {
   switch (sub) {
     case undefined:
     case 'show':
-      return printDay(journal.dayOf(doc, day(sub === 'show' ? rest[0] : undefined)), ctx);
+      return printDay(journal.dayOf(doc, day(sub === 'show' ? rest[0] : undefined)));
     case 'days': {
       const n = str(flags.last) ? positive(/** @type {string} */ (str(flags.last)), '--last') : 7;
       const from = addDays(ctx.today, 1 - n);
       const list = doc.days.filter((d) => d.date >= from);
       if (!list.length) console.log(`Nothing written in the last ${n} days.`);
-      list.forEach((d, i) => { if (i) console.log(''); printDay(d, ctx); });
+      list.forEach((d, i) => { if (i) console.log(''); printDay(d); });
       return;
     }
     case 'search': {
@@ -1100,7 +1097,7 @@ function journalCmd(ctx, sub, rest, flags) {
       if (!q) fail('search for what? compass journal search "word"');
       const list = journal.search(doc, q);
       if (!list.length) console.log('Nothing found.');
-      list.forEach((d, i) => { if (i) console.log(''); printDay(d, ctx); });
+      list.forEach((d, i) => { if (i) console.log(''); printDay(d); });
       return;
     }
     case 'write': {
@@ -1123,7 +1120,7 @@ function journalCmd(ctx, sub, rest, flags) {
     }
     default:
       // A date on its own: show that day.
-      if (/^(\d{4}-\d{2}-\d{2}|today|yesterday|-\d+)$/.test(sub)) return printDay(journal.dayOf(doc, day(sub)), ctx);
+      if (/^(\d{4}-\d{2}-\d{2}|today|yesterday|-\d+)$/.test(sub)) return printDay(journal.dayOf(doc, day(sub)));
       return fail(`unknown journal action “${sub}” (compass help)`);
   }
   const res = commitChange(ctx.cfg, ctx.cfg.journal, (raw) => {
