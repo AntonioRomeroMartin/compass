@@ -6,8 +6,8 @@ import * as domains from '../lib/domains.js';
 
 const NOW = new Date('2026-03-02T10:00:00Z');
 
-test('a status change sets the dates (and a read book is read to the end)', () => {
-  const b = books.newBook({ title: 'A novel', domain: 'reading', pages: 300, page: 40 }, NOW);
+test('a status change sets the dates', () => {
+  const b = books.newBook({ title: 'A novel', domain: 'reading' }, NOW);
   let doc = books.applyOps(books.emptyDoc('UTC'), [{ type: 'add', book: b }]);
   doc = books.applyOps(doc, [{ type: 'status', id: b.id, status: 'reading', today: '2026-03-02' }]);
   assert.deepEqual([doc.books[0].started, doc.books[0].finished], ['2026-03-02', null]);
@@ -15,7 +15,7 @@ test('a status change sets the dates (and a read book is read to the end)', () =
   doc = books.applyOps(doc, [{ type: 'status', id: b.id, status: 'reading', today: '2026-03-09' }]);
   assert.equal(doc.books[0].started, '2026-03-02');
   doc = books.applyOps(doc, [{ type: 'status', id: b.id, status: 'read', today: '2026-03-20' }]);
-  assert.deepEqual([doc.books[0].started, doc.books[0].finished, doc.books[0].page], ['2026-03-02', '2026-03-20', 300]);
+  assert.deepEqual([doc.books[0].started, doc.books[0].finished], ['2026-03-02', '2026-03-20']);
   assert.equal(books.readIn(doc, '2026').length, 1);
   assert.equal(books.readIn(doc, '2025').length, 0);
   doc = books.applyOps(doc, [{ type: 'status', id: b.id, status: 'want', today: '2026-03-21' }]);
@@ -32,17 +32,16 @@ test('quotes: add, edit and remove', () => {
   assert.deepEqual(doc.books[0].quotes, []);
 });
 
-test('normalize fills missing fields and drops bad values', () => {
+test('normalize fills missing fields and drops bad values (and the pages of older files)', () => {
   const doc = books.normalize({ books: [
-    { id: 'b1', title: 'Kept', status: 'lost', rating: 9, pages: 0, cover: 123, quotes: [{ id: 'q', text: '' }, { id: 'r', text: 'ok', page: 'x' }] },
+    { id: 'b1', title: 'Kept', status: 'lost', rating: 9, page: 3, pages: 10, cover: 123, quotes: [{ id: 'q', text: '' }, { id: 'r', text: 'ok', page: 'x' }] },
     { id: 'b2', title: '' },
   ] });
   assert.equal(doc.books.length, 1);
   const [b] = doc.books;
-  assert.deepEqual([b.status, b.rating, b.pages, b.cover, b.author, b.started], ['want', null, null, 123, null, null]);
+  assert.deepEqual([b.status, b.rating, b.cover, b.author, b.started], ['want', null, 123, null, null]);
+  assert.ok(!('page' in b) && !('pages' in b));
   assert.deepEqual(b.quotes, [{ id: 'r', text: 'ok', page: null }]);
-  assert.equal(books.progress({ ...b, page: 50, pages: 200 }), 0.25);
-  assert.equal(books.progress(b), null);
 });
 
 test('parseStatus and the Open Library results', () => {
@@ -55,8 +54,8 @@ test('parseStatus and the Open Library results', () => {
     { title: '' },
   ] });
   assert.deepEqual(found, [
-    { title: 'A Book', author: 'One, Two', olid: 'OL1W', cover: 42, pages: 210, year: 1999 },
-    { title: 'Bare', author: null, olid: 'OL2W', cover: null, pages: null, year: null },
+    { title: 'A Book', author: 'One, Two', olid: 'OL1W', cover: 42, year: 1999 },
+    { title: 'Bare', author: null, olid: 'OL2W', cover: null, year: null },
   ]);
   assert.equal(books.coverUrl(42, 'S'), 'https://covers.openlibrary.org/b/id/42-S.jpg');
 });

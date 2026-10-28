@@ -7,23 +7,20 @@ import { git, setup } from './helpers.mjs';
 const GOALS = { version: 1, timeZone: 'UTC', categories: [], goals: [] };
 const DOMAINS = { version: 1, domains: [{ id: 'reading', name: 'Reading', modules: ['books'] }, { id: 'work', name: 'Work' }] };
 
-test('books: add, status with dates, page, rating, quotes, edit, list and delete', () => {
+test('books: add, status with dates, rating, quotes, edit, list and delete', () => {
   const { dir, run, runAll, read } = setup({ 'goals.json': GOALS, 'domains.json': DOMAINS });
-  assert.match(run('book', 'add', 'A Novel', '--domain', 'reading', '--author', 'Some Writer', '--pages', '320'),
-    /^books: new “A Novel”\n· \[b_\w+\] A Novel — want to read · Some Writer · 320 pages · reading\n$/);
+  assert.match(run('book', 'add', 'A Novel', '--domain', 'reading', '--author', 'Some Writer'),
+    /^books: new “A Novel”\n· \[b_\w+\] A Novel — want to read · Some Writer · reading\n$/);
   assert.equal(git(join(dir, 'a'), 'log', '-1', '--format=%s'), 'books: new “A Novel”\n');
   assert.equal(read('a', 'books.json').timeZone, 'UTC');
   run('book', 'reading', 'novel');
-  run('book', 'page', 'novel', '80');
-  assert.match(run('books'), /▸ \[b_\w+\] A Novel — reading · Some Writer · p\. 80\/320 · \d{4}-\d{2}-\d{2} · reading/);
-  assert.match(runAll('book', 'page', 'novel', '400').stderr, /from 0 to 320/);
+  assert.match(run('books'), /▸ \[b_\w+\] A Novel — reading · Some Writer · \d{4}-\d{2}-\d{2} · reading/);
   run('book', 'quote', 'novel', 'A line worth keeping.', '--page', '81');
   run('book', 'read', 'novel');
   run('book', 'rate', 'novel', '4');
   run('book', 'edit', 'novel', '--notes', 'Slow start, great end.');
   const [b] = read('a', 'books.json').books;
   assert.equal(b.status, 'read');
-  assert.equal(b.page, 320);
   assert.equal(b.rating, 4);
   assert.ok(b.started && b.finished);
   assert.deepEqual(b.quotes.map((/** @type {any} */ q) => [q.text, q.page]), [['A line worth keeping.', 81]]);

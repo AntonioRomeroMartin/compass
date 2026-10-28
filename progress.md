@@ -13,10 +13,12 @@
 - Next module: journal (phase 4). Later phases: 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
 
 ## Sessions (most recent first)
+- 2026-10-28 · v2.10 (books): no page count. `page` and `pages` are gone from books.json (`normalize` drops them),
+  from the CLI (`book page`, `--pages`) and from the app (page box, bars, pages field); a book is only its status.
 - 2026-10-28 · v2.9 (books, phase 4): modules per area: `domains.json` `modules` (inherited by sub-areas;
   `domains.modulesOf`, ops `addModule`/`removeModule`, `domain add --module`, `domain edit --add-module/--remove-module`);
   the app's registry shows tasks, goals and habits everywhere and other modules only where listed. `lib/books.js`
-  (books.json: status want/reading/read/dropped that sets started/finished, page/pages, rating, notes, quotes, Open
+  (books.json: status want/reading/read/dropped that sets started/finished, rating, notes, quotes, Open
   Library `olid` and `cover` id; Open Library search) and the CLI (`compass books`, `compass book
   find|add|want|reading|read|dropped|page|rate|quote|edit|show|delete`, `add --find`). App: Books tab (bar of seven
   on the phone), rows with a small cover grouped by status (read before this year and dropped, folded), the book's

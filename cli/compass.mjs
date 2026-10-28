@@ -74,14 +74,12 @@ Usage:
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
   compass books [--domain D | --cwd PATH] [--status S]
   compass book find "text"              search Open Library
-  compass book add "title" (--domain D | --cwd PATH) [--author A] [--status S] [--pages N] [--find]
-                                        --find: author, pages and cover from the first Open Library match
+  compass book add "title" (--domain D | --cwd PATH) [--author A] [--status S] [--find]
+                                        --find: author and cover from the first Open Library match
   compass book want|reading|read|dropped <book>   sets the dates: started on reading, finished on read/dropped
-  compass book page <book> N            current page
   compass book rate <book> 1-5|none
   compass book quote <book> "text" [--page N] | --remove <quote>
-  compass book edit <book> [--title T] [--author A] [--domain D] [--notes T] [--pages N]
-                   [--started DATE] [--finished DATE]
+  compass book edit <book> [--title T] [--author A] [--domain D] [--notes T] [--started DATE] [--finished DATE]
   compass book show <book>
   compass book delete <book> --yes
   compass domains
@@ -860,15 +858,13 @@ function moduleName(m) {
 }
 
 /**
- * One line per book: status, author, progress, rating, dates and domain.
+ * One line per book: status, author, rating, dates and domain.
  * @param {Book} b @param {{ domain?: boolean }} [opts]
  */
 function bookLine(b, opts = {}) {
   const mark = { reading: '▸', want: '·', read: '✓', dropped: '✗' }[b.status];
   const bits = [books.STATUS_TEXT[b.status].toLowerCase()];
   if (b.author) bits.push(b.author);
-  if (b.status === 'reading' && b.page !== null) bits.push(b.pages ? `p. ${b.page}/${b.pages}` : `p. ${b.page}`);
-  else if (b.pages && b.status !== 'read') bits.push(`${b.pages} pages`);
   if (b.rating) bits.push('★'.repeat(b.rating));
   if (b.started || b.finished) bits.push([b.started ?? '?', b.finished ?? ''].join(' → ').replace(/ → $/, ''));
   if (b.quotes.length) bits.push(`${b.quotes.length} quote${b.quotes.length === 1 ? '' : 's'}`);
@@ -920,7 +916,7 @@ async function findOnline(query, limit) {
 }
 
 /** @param {books.Found} f */
-const foundLine = (f) => `${f.title} — ${[f.author, f.year, f.pages && `${f.pages} pages`, f.olid].filter(Boolean).join(' · ')}`;
+const foundLine = (f) => `${f.title} — ${[f.author, f.year, f.olid].filter(Boolean).join(' · ')}`;
 
 /**
  * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
@@ -956,13 +952,12 @@ async function book(ctx, sub, rest, flags) {
     }
     /** @type {Partial<Book>} */
     const fields = { author: orNull(str(flags.author)) };
-    if (str(flags.pages)) fields.pages = int(/** @type {string} */ (str(flags.pages)), '--pages', 1);
     if (flags.find) {
       const [f] = await findOnline([title, fields.author].filter(Boolean).join(' '), 1);
       if (!f) console.error('note: nothing found on Open Library; added without cover');
       else {
         console.log(`Open Library: ${foundLine(f)}`);
-        Object.assign(fields, { author: fields.author ?? f.author, pages: fields.pages ?? f.pages, olid: f.olid, cover: f.cover });
+        Object.assign(fields, { author: fields.author ?? f.author, olid: f.olid, cover: f.cover });
       }
     }
     let b = books.newBook({ title, domain, ...fields }, ctx.now);
@@ -981,10 +976,6 @@ async function book(ctx, sub, rest, flags) {
       case 'read':
       case 'dropped':
         ops = [{ type: 'status', id, status: sub, today: ctx.today }];
-        break;
-      case 'page':
-        if (!rest[1]) fail('which page? compass book page <book> N');
-        ops = [{ type: 'edit', id, fields: { page: int(rest[1], 'the page', 0, b.pages ?? Infinity) } }];
         break;
       case 'rate':
         if (!rest[1]) fail('which rating? compass book rate <book> 1-5 (or none)');
@@ -1010,11 +1001,10 @@ async function book(ctx, sub, rest, flags) {
         if (str(flags.author) !== undefined) fields.author = orNull(str(flags.author));
         if (str(flags.domain)) fields.domain = domainRef(ctx, /** @type {string} */ (str(flags.domain)));
         if (str(flags.notes) !== undefined) fields.notes = orNull(str(flags.notes));
-        if (str(flags.pages) !== undefined) fields.pages = orNull(str(flags.pages)) === null ? null : int(/** @type {string} */ (str(flags.pages)), '--pages', 1);
         for (const k of /** @type {const} */ (['started', 'finished'])) {
           if (str(flags[k]) !== undefined) fields[k] = attempt(() => tasks.parseDue(/** @type {string} */ (str(flags[k])), ctx.today));
         }
-        if (!Object.keys(fields).length) fail('nothing to change: --title, --author, --domain, --notes, --pages, --started or --finished');
+        if (!Object.keys(fields).length) fail('nothing to change: --title, --author, --domain, --notes, --started or --finished');
         ops = [{ type: 'edit', id, fields }];
         break;
       }

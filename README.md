@@ -123,13 +123,13 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   "timeZone": "Area/City",
   "books": [{ "id": "b_…", "title": "…", "author": "…", "domain": "reading", "status": "reading",
               "notes": null, "quotes": [{ "id": "q_…", "text": "…", "page": 12 }],
-              "started": "2026-10-20", "finished": null, "rating": null, "page": 60, "pages": 96,
+              "started": "2026-10-20", "finished": null, "rating": null,
               "olid": "OL…W", "cover": 123, "createdAt": "…" }]
 }
 ```
 
 - `status`: `want`, `reading`, `read` or `dropped`. Changing it sets the dates: `reading` sets `started` (if empty),
-  `read` and `dropped` set `finished`, `want` clears both; a book that is `read` is on its last page.
+  `read` and `dropped` set `finished`, `want` clears both. There is no page count.
 - `notes` are your own thoughts; `quotes` are lines from the book, each with an optional page. `rating`: 1-5.
 - `olid` and `cover` come from an Open Library search: only the cover's id is stored, the image is not.
 
@@ -157,8 +157,8 @@ compass today --cwd "$PWD"            # what matters in the domain of this folde
 compass habit add "Stretch" --domain sport --freq mon,wed,fri   # or: daily, 3/week
 compass habit done stretch yesterday  # also: today (default), -N, YYYY-MM-DD
 compass domain edit reading --add-module books
-compass book add "A novel" --domain reading --find    # --find: author, pages and cover from Open Library
-compass book reading novel && compass book page novel 40
+compass book add "A novel" --domain reading --find    # --find: author and cover from Open Library
+compass book reading novel
 compass book quote novel "A line worth keeping" --page 41
 compass help                          # every command (goals, sub-tasks, focus, edit…)
 ```

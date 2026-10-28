@@ -272,10 +272,7 @@
       </div>
       <ul id="book-results" class="results"></ul>
       <input name="title" required maxlength="200" autocomplete="off" placeholder="Title" aria-label="Title" class="big">
-      <div class="two">
-        <input name="author" maxlength="120" autocomplete="off" placeholder="Author" aria-label="Author">
-        <input name="pages" type="number" min="1" inputmode="numeric" placeholder="Pages" aria-label="Pages">
-      </div>
+      <input name="author" maxlength="120" autocomplete="off" placeholder="Author" aria-label="Author">
       <div id="book-picked" class="picked"></div>
       <fieldset class="pick">
         <legend>Area</legend>
@@ -305,11 +302,6 @@
         </div>
       </div>
       <div id="book-status" class="chip-pick" role="radiogroup" aria-label="Status"></div>
-      <div id="book-page-box" class="page-box">
-        <label>Page <input id="book-page" type="number" min="0" inputmode="numeric" aria-label="Current page"></label>
-        <span id="book-of" class="hint"></span>
-        <div id="book-page-bar"></div>
-      </div>
       <div id="book-rating" class="rating" role="group" aria-label="Rating"></div>
       <label>Notes
         <textarea id="book-notes" rows="3" maxlength="5000" placeholder="What you think of it…"></textarea>

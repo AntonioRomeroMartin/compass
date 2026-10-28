@@ -1,6 +1,6 @@
 // @ts-check
 // Books module (app side): book rows grouped by status (area page and Books tab), the book's own sheet (status,
-// page, rating, notes, quotes), the new/edit sheet with the Open Library search, and the area's card on Home.
+// rating, notes, quotes), the new/edit sheet with the Open Library search, and the area's card on Home.
 import * as domainsLib from '../../../lib/domains.js';
 import * as booksLib from '../../../lib/books.js';
 import { booksStore, canEdit, dispatchBooks, domainsStore, inAreas, todayKey } from '../../core/data.js';
@@ -19,18 +19,8 @@ function cover(b, size) {
 /** Five stars, the first `n` filled. @param {number} n */
 const stars = (n) => h('span', { class: 'stars', 'aria-label': `${n} of 5` }, '★'.repeat(n), h('span', { class: 'off' }, '★'.repeat(5 - n)));
 
-/** A bar with the share read and "p. 60/96" (a book just started is on page 0). @param {Book} b */
-function pageBar(b) {
-  const page = b.page ?? (b.status === 'reading' ? 0 : null);
-  const share = booksLib.progress({ ...b, page });
-  if (share === null) return page ? h('span', { class: 'hint' }, `p. ${page}`) : null;
-  const fill = h('span');
-  fill.style.width = `${Math.round(share * 100)}%`;
-  return h('span', { class: 'book-progress' }, h('span', { class: 'bar' }, fill), h('span', { class: 'hint' }, `p. ${page}/${b.pages}`));
-}
-
 /**
- * A book's row: small cover, title and author; the page bar while reading, the stars once read.
+ * A book's row: small cover, title and author; the stars once rated.
  * @param {Book} b @param {{ area?: string|null }} [show]  also a chip with its area
  */
 export function bookRow(b, show = {}) {
@@ -46,7 +36,6 @@ export function bookRow(b, show = {}) {
         { class: 'book-text' },
         h('span', { class: 'book-title' }, b.title),
         b.author ? h('span', { class: 'hint' }, b.author) : null,
-        b.status === 'reading' ? pageBar(b) : null,
       ),
       h(
         'span',
@@ -96,7 +85,7 @@ export function defaultBookArea() {
 
 // ---------------------------------------------------------------- the book's sheet
 
-/** A book's own sheet: status, page, rating, notes and quotes, each saved as it changes. @param {Book} book */
+/** A book's own sheet: status, rating, notes and quotes, each saved as it changes. @param {Book} book */
 export function openBook(book) {
   const dialog = /** @type {HTMLDialogElement} */ ($('book-dialog'));
   const today = todayKey();
@@ -107,7 +96,7 @@ export function openBook(book) {
     const edit = canEdit();
     $('book-cover').replaceChildren(cover(b, 'M'));
     $('book-title').textContent = b.title;
-    $('book-author').textContent = [b.author, b.pages ? `${b.pages} pages` : null].filter(Boolean).join(' · ');
+    $('book-author').textContent = b.author ?? '';
     const dates = [b.started && `Started ${b.started}`, b.finished && `${b.status === 'dropped' ? 'Dropped' : 'Finished'} ${b.finished}`];
     $('book-dates').textContent = dates.filter(Boolean).join(' · ');
 
@@ -116,22 +105,6 @@ export function openBook(book) {
       draw();
     });
     for (const btn of $('book-status').querySelectorAll('button')) /** @type {HTMLButtonElement} */ (btn).disabled = !edit;
-
-    // Page: while reading, and also later if it was set.
-    const pageBox = $('book-page-box');
-    pageBox.hidden = b.status !== 'reading' && b.page === null;
-    const page = /** @type {HTMLInputElement} */ ($('book-page'));
-    page.value = b.page === null ? '' : String(b.page);
-    page.max = b.pages ? String(b.pages) : '';
-    page.disabled = !edit;
-    page.onchange = () => {
-      const n = page.value === '' ? null : Math.max(0, Math.min(Number(page.value), b.pages ?? Infinity));
-      if (n !== null && !Number.isInteger(n)) return;
-      dispatchBooks({ type: 'edit', id: b.id, fields: { page: n } });
-      draw();
-    };
-    $('book-of').textContent = b.pages ? `of ${b.pages}` : '';
-    $('book-page-bar').replaceChildren(...[pageBar(b)].filter((x) => x !== null));
 
     // Rating: tapping the current number of stars clears it.
     $('book-rating').replaceChildren(...[1, 2, 3, 4, 5].map((n) => h('button', {
@@ -181,7 +154,7 @@ export function openBook(book) {
 // ---------------------------------------------------------------- new / edit sheet
 
 /**
- * New book (search Open Library or type it) or edit one's title, author, pages, area and cover.
+ * New book (search Open Library or type it) or edit one's title, author, area and cover.
  * @param {string} [area] area chosen in advance @param {Book} [book]
  */
 export function openBookForm(area = '', book) {
@@ -198,7 +171,6 @@ export function openBookForm(area = '', book) {
   $('book-submit').textContent = book ? 'Save' : 'Add';
   f.title.value = book?.title ?? '';
   f.author.value = book?.author ?? '';
-  f.pages.value = book?.pages ?? '';
   f.query.value = '';
   /** @type {{ olid: string|null, cover: number|null }} */
   let picked = { olid: book?.olid ?? null, cover: book?.cover ?? null };
@@ -234,7 +206,6 @@ export function openBookForm(area = '', book) {
         type: 'button', class: 'result', onclick: () => {
           if (!book || !f.title.value) f.title.value = r.title;
           if (!book || !f.author.value) f.author.value = r.author ?? '';
-          if (!book || !f.pages.value) f.pages.value = r.pages ?? '';
           picked = { olid: r.olid, cover: r.cover };
           showPicked();
           box.replaceChildren();
@@ -268,11 +239,7 @@ export function openBookForm(area = '', book) {
     const title = String(f.title.value).trim();
     if (!title) return f.title.focus();
     if (!domain) { msg.textContent = 'Choose an area.'; return; }
-    const pages = Number(f.pages.value);
-    const fields = {
-      title, author: String(f.author.value).trim() || null, domain,
-      pages: Number.isInteger(pages) && pages > 0 ? pages : null, olid: picked.olid, cover: picked.cover,
-    };
+    const fields = { title, author: String(f.author.value).trim() || null, domain, olid: picked.olid, cover: picked.cover };
     if (book) dispatchBooks({ type: 'edit', id: book.id, fields });
     else {
       const b = booksLib.newBook(fields);
@@ -297,7 +264,7 @@ export function areaSections({ id, ids, showSub }) {
   });
 }
 
-/** "2 reading · 5 read in 2026" and a line per book being read, with its page bar. @param {import('../index.js').AreaScope} scope */
+/** "2 reading · 5 read in 2026" and a line per book being read. @param {import('../index.js').AreaScope} scope */
 export function homeCard({ ids }) {
   const list = booksStore.current().books.filter((b) => inAreas(ids, b.domain));
   const year = todayKey().slice(0, 4);
@@ -305,17 +272,6 @@ export function homeCard({ ids }) {
   const read = list.filter((b) => b.status === 'read' && b.finished?.startsWith(year)).length;
   /** @type {import('../index.js').HomeCard['stats']} */
   const stats = [['reading', reading.length], [`read in ${year}`, read]];
-  const lines = reading.slice(0, 3).map((b) => {
-    const share = booksLib.progress({ ...b, page: b.page ?? 0 });
-    const fill = h('span');
-    if (share !== null) fill.style.width = `${Math.round(share * 100)}%`;
-    return h(
-      'li',
-      { class: 'mini goal-bar' },
-      h('span', { class: 'mini-title' }, b.title),
-      share !== null ? h('span', { class: 'count' }, `${Math.round(share * 100)}%`) : null,
-      share !== null ? h('div', { class: 'bar' }, fill) : null,
-    );
-  });
+  const lines = reading.slice(0, 3).map((b) => h('li', { class: 'mini' }, h('span', { class: 'mini-title' }, b.title), b.author ? h('span', { class: 'hint' }, b.author) : null));
   return { stats, body: lines.length ? [h('ul', { class: 'mini-list' }, ...lines)] : [] };
 }
