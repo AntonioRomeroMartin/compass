@@ -227,6 +227,16 @@ test('domains: list, add and edit (domains.json is created on the first write)',
   assert.match(git(join(dir, 'a'), 'log', '-1', '--format=%s'), /^domains: edited “studies\/course-a”, paths “studies\/course-a”$/m);
 });
 
+test('domain delete: only an empty domain, and with --yes', () => {
+  const { run, runAll, read } = setupWithDomains();
+  run('task', 'add', 'Swim', '--domain', 'sport');
+  assert.match(runAll('domain', 'delete', 'sport', '--yes').stderr, /still used by 1 tasks/);
+  run('domain', 'add', 'spare', '--name', 'Spare');
+  assert.match(runAll('domain', 'delete', 'spare').stderr, /--yes/);
+  run('domain', 'delete', 'spare', '--yes');
+  assert.ok(!read('a', 'domains.json').domains.some((/** @type {any} */ d) => d.id === 'spare'));
+});
+
 test('domain add and edit take several paths', () => {
   const { dir, run, read } = setup({ 'goals.json': GOALS });
   const [p1, p2, p3] = ['one', 'two', 'three'].map((x) => join(dir, 'work', x));

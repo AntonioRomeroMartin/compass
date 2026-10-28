@@ -11,7 +11,7 @@
 - Books (`books.json`): status (want/reading/read/dropped) that sets the start and finish dates, rating, notes, quotes,
   Open Library search and cover id; no page count; the area is optional (none = general reading). CLI
   `compass book…`; app: Books tab, a block on the page of areas with books, and a Books card on Home.
-- Tests: `node --test tests/*.test.mjs` (64).
+- Tests: `node --test tests/*.test.mjs` (64). CLI `domain delete` removes an empty domain.
 - Next: the journal (phase 4).
 - Rest of phase 3: offline editing (local queue; offline is read-only today), managing areas from the app (create,
   rename, reorder). Deferred: day close and Focus in the app (the CLI still supports focus).
