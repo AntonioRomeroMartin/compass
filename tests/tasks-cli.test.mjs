@@ -227,6 +227,26 @@ test('domains: list, add and edit (domains.json is created on the first write)',
   assert.match(git(join(dir, 'a'), 'log', '-1', '--format=%s'), /^domains: edited “studies\/course-a”, paths “studies\/course-a”$/m);
 });
 
+test('domain add and edit take several paths', () => {
+  const { dir, run, read } = setup({ 'goals.json': GOALS });
+  const [p1, p2, p3] = ['one', 'two', 'three'].map((x) => join(dir, 'work', x));
+  run('domain', 'add', 'studies', '--path', p1, '--path', p2, '--path', p1);
+  assert.deepEqual(read('a', 'domains.json').domains[0].paths, [p1, p2]);
+  run('domain', 'edit', 'studies', '--add-path', p3, '--remove-path', p1, '--remove-path', p2);
+  assert.deepEqual(read('a', 'domains.json').domains[0].paths, [p3]);
+});
+
+test('task location: add, show, edit and clear', () => {
+  const { run, read } = setupWithDomains();
+  run('task', 'add', 'Return books', '--domain', 'sport', '--location', 'library');
+  assert.equal(read('a', 'tasks.json').tasks[0].location, 'library');
+  assert.match(run('task', 'show', 'books'), /@ library/);
+  run('task', 'edit', 'books', '--location', 'town hall');
+  assert.equal(read('a', 'tasks.json').tasks[0].location, 'town hall');
+  run('task', 'edit', 'books', '--location', 'none');
+  assert.equal(read('a', 'tasks.json').tasks[0].location, null);
+});
+
 test('task delete needs --yes and removes the task, closed ones too', () => {
   const { run, runAll, read } = setupWithDomains();
   run('task', 'add', 'Old errand', '--domain', 'sport');

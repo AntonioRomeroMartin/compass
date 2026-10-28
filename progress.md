@@ -1,19 +1,20 @@
 # Progress — compass
 
 ## Current status
-- Version 2.7 (phase 3 in progress): the app is a dashboard with Home (one card per area), Today (overdue, today
+- Version 2.8 (phase 3 in progress): the app is a dashboard with Home (one card per area), Today (overdue, today
   and the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and separate
   Tasks and Goals blocks) and a quick task sheet; split into `app/core/`, `app/modules/` (tasks, goals) and
   `app/views/`. Tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags.
   Goals no longer repeat (habits will be a module of their own) and keep one progress number; tasks do not link to goals; `task add --stdin` adds several in one commit.
-  Habits (`habits.json`): model, CLI and app done. 55 tests.
+  Habits (`habits.json`): model, CLI and app done. 57 tests.
 - Next (rest of phase 3): offline editing (local queue; offline is read-only today), managing areas from the app
-  (create, rename, reorder), choosing modules per area in `domains.json`; CLI: `domain add` keeps only the last
-  `--path`, and `task add/edit --location`. Deferred: day close and Focus in the app (the CLI still supports focus).
-- Habits: a module of their own (to design), not repeating goals.
+  (create, rename, reorder), choosing modules per area in `domains.json` (first: later modules depend on it). Deferred: day close and Focus in the app (the CLI still supports focus).
 - Later phases: 4 journal and books · 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
 
 ## Sessions (most recent first)
+- 2026-10-28 · v2.8 (CLI): `domain add --path` and `domain edit --add-path/--remove-path` can be repeated (only the
+  last value was kept; repeated flags are now also collected by `parse`), and `task add/edit --location` (shown as
+  `@ place`; `none` clears it). Next: modules per area in `domains.json`. 57 tests.
 - 2026-10-27 · v2.7 (habits, step 3): `compass habit done|undo` take several days in one commit, so a sync script can
   mark a habit's missing days at once (the data repo's owner uses it from a fitness sync). Habits are done. 55 tests.
 - 2026-10-27 · v2.6 (habits, step 2): the app. Habits tab (bar of six on the phone: Home · Today · Areas · + · Goals

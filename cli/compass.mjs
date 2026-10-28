@@ -49,7 +49,7 @@ Usage:
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE]
-                   [--ongoing PATH] [--notes T] [--focus]
+                   [--ongoing PATH] [--notes T] [--location T] [--focus]
   compass task add --stdin [options]    one task per line ("title" --due fri …), all in one commit;
                                         options given here apply to every line
   compass task done|undo|drop|focus|unfocus|show <task>
@@ -57,7 +57,7 @@ Usage:
   compass task drop <task> --stop       a repeating task: no next occurrence
   compass task move <task> [DATE]       default: tomorrow
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
-                   [--ongoing PATH] [--notes T]          (none clears a field)
+                   [--ongoing PATH] [--notes T] [--location T]   (none clears a field)
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
   compass habits [--domain D | --cwd PATH] [--archived]
   compass habit add "title" (--domain D | --cwd PATH) --freq F [--notes T]
@@ -66,8 +66,8 @@ Usage:
   compass habit archive|unarchive <habit>
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
   compass domains
-  compass domain add <id> [--name N] [--parent P] [--path DIR] [--color C]
-  compass domain edit <id> [--name N] [--color C|none] [--add-path DIR] [--remove-path DIR]
+  compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
+  compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
   compass goals [--past|--archived|--all] [--category C]
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
                    [--target N] [--unit U] [--deadline YYYY-MM-DD]
@@ -82,7 +82,7 @@ Usage:
 
 <task>, <goal>: an id (t_…, g_…) or part of the title. D: a domain id or name. --cwd: the domain whose
 "paths" contain that folder (a subdomain also sees the dated items of its parents).
-DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
+--path, --add-path and --remove-path can be repeated. DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
 weekdays, monthly, monthly:15, none. F (habits): daily, 3/week (any days), mon,thu.
 --no-sync skips git pull/push; --timeout S limits the pull (default 3 s for today, 20 s otherwise).
 Config: ~/.config/compass/config.json →
@@ -91,22 +91,29 @@ Config: ~/.config/compass/config.json →
 /** Flags that never take a value. */
 const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes', 'stdin']);
 
-/** @param {string[]} argv */
+/**
+ * `flags` keeps the last value of each flag; `lists` keeps every value of a repeated one (`--path A --path B`).
+ * @param {string[]} argv
+ */
 function parse(argv) {
   /** @type {string[]} */
   const pos = [];
   /** @type {Record<string, string | true>} */
   const flags = {};
+  /** @type {Record<string, string[]>} */
+  const lists = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
       const next = argv[i + 1];
-      if (!BOOLEAN.has(name) && next !== undefined && !next.startsWith('--')) flags[name] = argv[++i];
-      else flags[name] = true;
+      if (!BOOLEAN.has(name) && next !== undefined && !next.startsWith('--')) {
+        flags[name] = argv[++i];
+        (lists[name] ??= []).push(argv[i]);
+      } else flags[name] = true;
     } else pos.push(a);
   }
-  return { pos, flags };
+  return { pos, flags, lists };
 }
 
 /**
@@ -209,6 +216,7 @@ function taskLine(t, ctx, opts = {}) {
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
   if (t.subtasks.length) bits.push(`sub ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
+  if (t.location) bits.push(`@ ${t.location}`);
   if (t.notes) bits.push('notes');
   if (t.status !== 'open' && t.doneAt) bits.push(`${t.status} ${periodKey('day', new Date(t.doneAt), ctx.tz)}`);
   return `${mark} [${t.id}] ${t.title}${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
@@ -299,7 +307,7 @@ function pickZone(...zones) {
 }
 
 async function main() {
-  const { pos, flags } = parse(process.argv.slice(2));
+  const { pos, flags, lists } = parse(process.argv.slice(2));
   const [cmd, sub, ...rest] = pos;
   if (!cmd || cmd === 'help' || flags.help) {
     console.log(HELP);
@@ -343,7 +351,7 @@ async function main() {
     case 'tasks': return listTasks(ctx, flags);
     case 'task': return task(ctx, sub, rest, flags);
     case 'domains': return listDomains(ctx);
-    case 'domain': return domain(ctx, sub, rest, flags);
+    case 'domain': return domain(ctx, sub, rest, flags, lists);
     case 'goals': return listGoals(ctx, flags);
     case 'goal': return goal(ctx, sub, rest, flags);
     case 'habits': return listHabits(ctx, flags);
@@ -479,7 +487,7 @@ function task(ctx, sub, rest, flags) {
     const repeat = str(opts.repeat) ? rule(/** @type {string} */ (str(opts.repeat)), due ?? ctx.today) : null;
     const t = tasks.newTask({
       title, domain: /** @type {string} */ (scope.id), due: repeat && !due ? tasks.firstDue(repeat, ctx.today) : due,
-      repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)),
+      repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)), location: orNull(str(opts.location)),
     }, ctx.now);
     return { t, focus: !!opts.focus };
   };
@@ -575,7 +583,7 @@ function task(ctx, sub, rest, flags) {
           fields.repeat = rule(/** @type {string} */ (str(flags.repeat)), fields.due ?? t.due ?? ctx.today);
           if (fields.repeat && !(fields.due ?? t.due)) fields.due = tasks.firstDue(fields.repeat, ctx.today);
         }
-        for (const k of /** @type {const} */ (['notes', 'ongoing'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
+        for (const k of /** @type {const} */ (['notes', 'ongoing', 'location'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
         if (!Object.keys(fields).length) fail('nothing to edit');
         build = () => ({ tasks: [{ type: 'edit', id: tid, fields }] });
         break;
@@ -667,9 +675,9 @@ function listDomains(ctx) {
 
 /**
  * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
- * @param {Record<string, string | true>} flags
+ * @param {Record<string, string | true>} flags @param {Record<string, string[]>} lists
  */
-function domain(ctx, sub, rest, flags) {
+function domain(ctx, sub, rest, flags, lists) {
   const id = rest[0];
   if (!domains.isValidId(id)) fail('which domain? an id like "studies" or "studies/course-a" (no spaces)');
   /** @param {string} p */
@@ -683,7 +691,8 @@ function domain(ctx, sub, rest, flags) {
     /** @type {import('../lib/domains.js').Domain} */
     const d = { id, name: str(flags.name) ?? id.slice(id.lastIndexOf('/') + 1) };
     if (parent) d.parent = parent;
-    if (str(flags.path)) d.paths = [domains.cleanPath(abs(/** @type {string} */ (str(flags.path))))];
+    const paths = [...new Set((lists.path ?? []).map((p) => domains.cleanPath(abs(p))))];
+    if (paths.length) d.paths = paths;
     if (str(flags.color)) d.color = str(flags.color);
     ops = [{ type: 'add', domain: d }];
   } else if (sub === 'edit') {
@@ -691,8 +700,8 @@ function domain(ctx, sub, rest, flags) {
     ops = [];
     const color = str(flags.color);
     if (str(flags.name) || color) ops.push({ type: 'edit', id, fields: { ...(str(flags.name) ? { name: str(flags.name) } : {}), ...(color ? { color: orNull(color) } : {}) } });
-    if (str(flags['add-path'])) ops.push({ type: 'addPath', id, path: abs(/** @type {string} */ (str(flags['add-path']))) });
-    if (str(flags['remove-path'])) ops.push({ type: 'removePath', id, path: abs(/** @type {string} */ (str(flags['remove-path']))) });
+    for (const p of lists['add-path'] ?? []) ops.push({ type: 'addPath', id, path: abs(p) });
+    for (const p of lists['remove-path'] ?? []) ops.push({ type: 'removePath', id, path: abs(p) });
     if (!ops.length) fail('nothing to edit');
   } else {
     return fail(`unknown domain action “${sub}” (compass help)`);
