@@ -17,6 +17,7 @@ import { dirname, join, resolve } from 'node:path';
  * @property {string} tasks    path of tasks.json inside the repo
  * @property {string} domains  path of domains.json inside the repo
  * @property {string} habits   path of habits.json inside the repo
+ * @property {string} books    path of books.json inside the repo
  */
 
 const CONFIG_PATH = process.env.COMPASS_CONFIG ?? join(homedir(), '.config', 'compass', 'config.json');
@@ -36,6 +37,7 @@ export function loadConfig() {
     tasks: raw.tasks ?? 'tasks.json',
     domains: raw.domains ?? 'domains.json',
     habits: raw.habits ?? 'habits.json',
+    books: raw.books ?? 'books.json',
   };
 }
 
