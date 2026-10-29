@@ -9,7 +9,8 @@ A static PWA to track **tasks**, **habits** and **goals** (by horizon: daily to 
    - *Repository access*: **Only select repositories** → that repo.
    - *Permissions* → *Contents*: **Read and write**. Nothing else.
 3. Open the app, tap ⚙ and paste the token. On GitHub Pages your username is taken from the site's address; the repo
-   (`compass-data`), the goals file (`goals.json`; tasks and areas go next to it) and the branch (`main`) are filled in. If the file doesn't exist, the app creates an empty one.
+   (`compass-data`) and the branch (`main`) are filled in. The data files (`goals.json`, `tasks.json`…) live at the
+   repo's root; if `goals.json` doesn't exist, the app creates an empty one.
 4. Create your categories (“Categories” button) and your goals. On a phone you can install it as an app.
 
 ## Privacy

@@ -97,7 +97,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
       return { doc: mod.normalize(JSON.parse(res.text)), sha: res.sha, etag: res.etag };
     } catch (err) {
       if (err instanceof GitHubError && err.status === 404) {
-        if (required) throw new Error(`${t.path} was not found in ${t.owner}/${t.repo}. Check the repo and file in More → GitHub connection.`);
+        if (required) throw new Error(`${t.path} was not found in ${t.owner}/${t.repo}. Check the repo and branch in More → GitHub connection.`);
         return { doc: empty(), sha: null, etag: null };
       }
       throw err;
