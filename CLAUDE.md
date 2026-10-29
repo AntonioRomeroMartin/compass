@@ -23,7 +23,7 @@ Each user's data lives in their own private repo.
   `lib/domains.js` (`Domain`, `DomainsDoc`). Goal categories and domains are one list (category = domain id or name).
 - Data commits use the prefix of the file they change (`goals:`, `tasks:`, `domains:`); code commits, `compass:`.
 - New logic goes in `lib/` and is used by both sides; never duplicated between app and CLI.
-- Before pushing: `node --test tests/*.test.mjs`. If the `SHELL` list in `sw.js` changes, bump `VERSION`.
+- Before pushing: `node --test tests/*.test.mjs`. A new file the app loads goes in `SHELL` (`sw.js`; `tests/sw.test.mjs` fails otherwise); there is no version to bump.
 
 ## Saving progress
 As you go, without waiting for the end (the session may close without notice): after each important
