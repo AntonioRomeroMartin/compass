@@ -1,0 +1,26 @@
+# Runs the test suite on every pull request and on every push to main, so a PR shows whether it is safe to merge
+# before it is published (GitHub Pages serves main). The tests need nothing but Node: no install step, no secrets.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/
