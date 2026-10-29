@@ -1,5 +1,5 @@
 // @ts-check
-// GitHub connection: token, repo and data files of this device.
+// GitHub connection of this device: token, repo and branch. The data files are always at the repo's root.
 import { LS, STORES, refresh, render, state } from '../core/data.js';
 import { $, lsSet } from '../core/ui.js';
 import { GitHubError, readFile, writeFile } from '../../lib/github.js';
@@ -10,6 +10,9 @@ import { deviceTimeZone } from '../../lib/period.js';
 
 /** Data repo name suggested on a new device; it is the convention in the README. */
 const DEFAULT_REPO = 'compass-data';
+
+/** The goals file; the other data files go next to it. Fixed, so an old saved path cannot point elsewhere. */
+export const GOALS_FILE = 'goals.json';
 
 /** The owner of a GitHub Pages site (`<owner>.github.io`), or '' elsewhere (e.g. a local preview). */
 function pagesOwner() {
@@ -26,7 +29,6 @@ export function openSettings() {
   // A new device starts with the usual values: the site's owner, the data repo by convention, its root.
   f.owner.value = cfg?.owner ?? pagesOwner();
   f.repo.value = cfg?.repo ?? DEFAULT_REPO;
-  f.path.value = cfg?.path ?? 'goals.json';
   f.branch.value = cfg?.branch ?? 'main';
   const msg = $('settings-msg');
   msg.textContent = '';
@@ -38,7 +40,7 @@ export function openSettings() {
       token: String(f.token.value).trim(),
       owner: String(f.owner.value).trim(),
       repo: String(f.repo.value).trim(),
-      path: String(f.path.value).trim(),
+      path: GOALS_FILE,
       branch: String(f.branch.value).trim() || 'main',
     };
     msg.textContent = 'Checking…';
