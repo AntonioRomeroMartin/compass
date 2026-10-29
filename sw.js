@@ -2,10 +2,11 @@
 /// <reference lib="webworker" />
 // Service worker: caches the app (not the data) so it opens offline.
 // Data is cached separately in localStorage; calls to api.github.com do not go through here.
-// Bump VERSION when the SHELL list changes (content updates by itself: network first).
+// One cache under a fixed name, with no version to bump: the app is fetched network first (so it is always the
+// latest), the cache only serves it offline. A change to SHELL changes this file, so the browser installs it again,
+// which caches the new list and drops what left it (tests/sw.test.mjs checks the list is complete).
 
-const VERSION = 'v13';
-const CACHE = `compass-${VERSION}`;
+const CACHE = 'compass-shell';
 const SHELL = [
   './',
   './index.html',
@@ -45,26 +46,33 @@ const SHELL = [
 
 const sw = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
 
+/** Full URLs of SHELL: only these are kept in the cache. */
+const KEEP = new Set(SHELL.map((p) => new URL(p, sw.location.href).href));
+
 sw.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => sw.skipWaiting()));
 });
 
+/** Removes the caches of older versions (compass-v13, goals-…) and the files that are no longer in SHELL. */
+async function prune() {
+  for (const k of await caches.keys()) if ((k.startsWith('compass-') || k.startsWith('goals-')) && k !== CACHE) await caches.delete(k);
+  const cache = await caches.open(CACHE);
+  for (const req of await cache.keys()) if (!KEEP.has(req.url)) await cache.delete(req);
+}
+
 sw.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith('compass-') || k.startsWith('goals-')) && k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => sw.clients.claim()),
-  );
+  event.waitUntil(prune().then(() => sw.clients.claim()));
 });
 
-// Network first for the app (so you always see the latest version); cache if offline.
+// Network first for the app (so you always see the latest version); the SHELL files are refreshed in the cache
+// for when there is no network.
 sw.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== sw.location.origin) return;
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && KEEP.has(req.url)) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
