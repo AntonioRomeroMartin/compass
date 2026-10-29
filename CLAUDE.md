@@ -23,7 +23,10 @@ Each user's data lives in their own private repo.
   `lib/domains.js` (`Domain`, `DomainsDoc`). Goal categories and domains are one list (category = domain id or name).
 - Data commits use the prefix of the file they change (`goals:`, `tasks:`, `domains:`); code commits, `compass:`.
 - New logic goes in `lib/` and is used by both sides; never duplicated between app and CLI.
-- Before pushing: `node --test tests/*.test.mjs`. A new file the app loads goes in `SHELL` (`sw.js`; `tests/sw.test.mjs` fails otherwise); there is no version to bump. GitHub runs the same tests on every PR (`.github/workflows/tests.yml`): merge only when they pass.
+- Before pushing: `node --test tests/*.test.mjs`. A new file the app loads goes in `SHELL` (`sw.js`; `tests/sw.test.mjs` fails otherwise); there is no version to bump.
+- Publishing: work on a branch, open a PR, check that its diff is only what was asked (and try it in the preview if it
+  shows on screen), then `gh pr merge <n> --auto --squash`. GitHub merges it once the `test` check
+  (`.github/workflows/tests.yml`) passes and deletes the branch; `main` requires that check, for admins too.
 
 ## Saving progress
 As you go, without waiting for the end (the session may close without notice): after each important
