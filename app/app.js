@@ -9,7 +9,7 @@ import { openBookForm } from './modules/books/view.js';
 import { renderBooksView } from './views/books.js';
 import { openJournal, openPassphrase, renderJournalView } from './modules/journal/view.js';
 import { renderAreas, renderNavAreas } from './views/areas.js';
-import { openSettings } from './views/settings.js';
+import { GOALS_FILE, openSettings } from './views/settings.js';
 import { renderHome } from './views/home.js';
 import { renderTodayView } from './views/today.js';
 import { civilDate, periodKeys } from '../lib/period.js';
@@ -147,7 +147,9 @@ function init() {
     applyTheme(next);
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(lsGet(LS.theme)));
-  state.cfg = lsGet(LS.cfg);
+  // Connections saved by older versions may name another path (data/goals.json): the files are at the root.
+  const saved = lsGet(LS.cfg);
+  state.cfg = saved && { ...saved, path: GOALS_FILE };
   const ui = lsGet(LS.ui);
   if (ui) {
     state.view = ui.view === 'category' ? 'category' : 'horizon';
