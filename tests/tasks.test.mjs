@@ -188,6 +188,24 @@ test('domains: normalize, hierarchy and lookup', () => {
   assert.deepEqual(domains.normalize([{ id: 'x' }]).domains, [{ id: 'x', name: 'x' }]);
 });
 
+test('domains: move among siblings, new ids from names, usage', () => {
+  const ids = (/** @type {import('../lib/domains.js').DomainsDoc} */ d) => d.domains.map((x) => x.id);
+  let doc = domains.applyOps(REGISTRY, [{ type: 'move', id: 'sport', before: 'studies' }]);
+  assert.deepEqual(ids(doc), ['sport', 'studies', 'studies/course-a', 'studies/course-b']);
+  doc = domains.applyOps(doc, [{ type: 'move', id: 'studies/course-a', before: null }]);
+  assert.deepEqual(ids(doc), ['sport', 'studies', 'studies/course-b', 'studies/course-a']);
+  // `before` that is not a sibling (or no longer exists) means last among its siblings; an unknown id does nothing.
+  doc = domains.applyOps(doc, [{ type: 'move', id: 'sport', before: 'studies/course-b' }, { type: 'move', id: 'gone', before: null }]);
+  assert.deepEqual(ids(doc), ['studies', 'studies/course-b', 'studies/course-a', 'sport']);
+  assert.equal(domains.commitMessage([{ type: 'move', id: 'sport', before: null }]), 'domains: moved “sport”');
+
+  assert.equal(domains.newId(REGISTRY, 'Música y Más'), 'musica-y-mas');
+  assert.equal(domains.newId(REGISTRY, 'Course A', 'studies'), 'studies/course-a-2');
+  assert.equal(domains.newId(REGISTRY, '¡!'), 'area');
+
+  assert.deepEqual(domains.usage(REGISTRY, 'studies/course-a', { tasks: ['Course A', 'studies', null], goals: ['studies/course-a'], books: [] }), [['tasks', 1], ['goals', 1]]);
+});
+
 test('domains: validation problems', () => {
   const doc = domains.normalize({ domains: [
     { id: 'a/b', name: 'B', paths: ['relative/dir'] },

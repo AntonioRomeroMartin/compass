@@ -1,7 +1,7 @@
 # Progress — compass
 
 ## Current status
-- Version 2.11 (phase 4: books and journal). The app is a dashboard: Home (one card per area), Today (overdue, today and
+- Version 2.12 (phase 3 done: areas edited in the app, offline editing). The app is a dashboard: Home (one card per area), Today (overdue, today and
   the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and one block per
   module), Goals, Habits and Books tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Book). Code split into
   `app/core/`, `app/modules/` (tasks, goals, habits, books) and `app/views/`.
@@ -15,8 +15,10 @@
   (`lib/crypt.js`: AES-256-GCM, PBKDF2-SHA256; WebCrypto in the app, node:crypto in `cli/crypt.mjs`, same format).
   The app keeps the password per device (More → Encryption password) and shows the journal at the end of Today and
   on its page; the CLI takes it from $COMPASS_PASSPHRASE or the keyring (secret-tool). Commit messages name only days.
-- Tests: `node --test tests/*.test.mjs` (68). CLI `domain delete` removes an empty domain.
-- Next: phase 6 summaries of Fitness and University (what to show: to decide).
-- Rest of phase 3: offline editing (local queue; offline is read-only today), managing areas from the app (create,
-  rename, reorder). Deferred: day close and Focus in the app (the CLI still supports focus).
-- Later phases: 5 trading and finance (client-side encrypted data) · 6 summaries of other areas.
+- Areas: Edit on the Areas list adds areas and sub-areas, renames them (the id stays), reorders them by dragging ⠿
+  (`move` op; CLI `domain move`) and deletes an empty one (`domains.usage`, shared with CLI `domain delete`).
+- Offline: everything can be edited on the copy saved on the device; changes wait there and are uploaded when back
+  online (the header shows only a crossed-out cloud while offline).
+- Tests: `node --test tests/*.test.mjs` (71), also run by GitHub on every PR.
+- Next: phase 5 trading and finance (client-side encrypted data). Deferred: day close and Focus in the app (the CLI
+  still supports focus), phase 6 summaries of Fitness and University.
