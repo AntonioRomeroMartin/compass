@@ -27,5 +27,6 @@ Each user's data lives in their own private repo.
 
 ## Saving progress
 As you go, without waiting for the end (the session may close without notice): after each important
-change, update `progress.md` (date, what was done, next step) and commit and push to the working branch
-(`main` is protected: everything goes in through a PR).
+change, update "Current status" in `progress.md` (what works now and what comes next) and commit and push to the
+working branch (`main` is protected: everything goes in through a PR). What was done goes in the commit message;
+there is no log of sessions.

@@ -52,8 +52,11 @@ export const isNetworkError = (err) => err instanceof TypeError;
  * @param {() => boolean} [opts.ready]   saving is allowed (e.g. only once the required file was found)
  * @param {() => RepoConfig|null} opts.cfg
  * @param {() => void} opts.onChange
+ * @param {{ decode: (text: string) => Promise<string>, encode: (text: string) => Promise<string> }} [opts.codec]
+ *   for a sealed file: opens what is read and seals what is written (the local copy is kept open)
+ * @param {() => boolean} [opts.active]  the file is used on this device (e.g. its passphrase is set); if not, nothing is read or written
  */
-export function createStore({ mod, file, ls, empty, cfg, onChange, required = false, ready = () => true }) {
+export function createStore({ mod, file, ls, empty, cfg, onChange, required = false, ready = () => true, codec, active = () => true }) {
   const keys = { cache: `${ls}.cache`, pending: `${ls}.pending` };
   const s = {
     /** @type {D} */ base: empty(),
@@ -94,7 +97,8 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
     try {
       const res = await readFile(t, known ? s.etag : null);
       if (res.unchanged) return null;
-      return { doc: mod.normalize(JSON.parse(res.text)), sha: res.sha, etag: res.etag };
+      const text = codec ? await codec.decode(res.text) : res.text;
+      return { doc: mod.normalize(JSON.parse(text)), sha: res.sha, etag: res.etag };
     } catch (err) {
       if (err instanceof GitHubError && err.status === 404) {
         if (required) throw new Error(`${t.path} was not found in ${t.owner}/${t.repo}. Check the repo and branch in More → GitHub connection.`);
@@ -106,7 +110,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
 
   async function refresh() {
     // While saving, the save itself brings the new version (and a read started now could land after it, older).
-    if (!target() || s.saving) return;
+    if (!target() || s.saving || !active()) return;
     try {
       const fresh = await read(s.loaded || !!s.fetchedAt);
       if (fresh) ({ doc: s.base, sha: s.sha, etag: s.etag } = fresh);
@@ -131,7 +135,7 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
 
   async function flush() {
     const t = target();
-    if (s.saving || !s.pending.length || !t || !s.loaded || !ready()) return;
+    if (s.saving || !s.pending.length || !t || !s.loaded || !ready() || !active()) return;
     s.saving = true;
     onChange();
     const batch = s.pending.slice();
@@ -139,7 +143,8 @@ export function createStore({ mod, file, ls, empty, cfg, onChange, required = fa
       for (let attempt = 0; ; attempt++) {
         const next = mod.applyOps(s.base, batch);
         try {
-          s.sha = await writeFile(t, mod.serialize(next), s.sha, mod.commitMessage(batch, s.base, next));
+          const text = mod.serialize(next);
+          s.sha = await writeFile(t, codec ? await codec.encode(text) : text, s.sha, mod.commitMessage(batch, s.base, next));
           s.base = next;
           s.pending = s.pending.slice(batch.length);
           s.fetchedAt = new Date().toISOString();

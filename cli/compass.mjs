@@ -11,6 +11,9 @@ import { applyOps, commitMessage, emptyDoc, isDone, isExpired, newId, normalize,
 import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
 import * as habits from '../lib/habits.js';
+import * as books from '../lib/books.js';
+import * as journal from '../lib/journal.js';
+import * as cryptSync from './crypt.mjs';
 import { buildToday } from '../lib/today.js';
 import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, readJsonIfExists } from './repo.mjs';
 
@@ -23,6 +26,9 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
 /** @typedef {import('../lib/domains.js').DomainsDoc} DomainsDoc */
 /** @typedef {import('../lib/habits.js').Habit} Habit */
 /** @typedef {import('../lib/habits.js').HabitsDoc} HabitsDoc */
+/** @typedef {import('../lib/books.js').Book} Book */
+/** @typedef {import('../lib/books.js').BooksDoc} BooksDoc */
+/** @typedef {import('../lib/journal.js').JournalDoc} JournalDoc */
 /** @typedef {import('./repo.mjs').Config} Config */
 
 /**
@@ -37,10 +43,11 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
  * @property {TasksDoc} tasks
  * @property {DomainsDoc} domains
  * @property {HabitsDoc} habits
+ * @property {BooksDoc} books
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks, habits and domains from the command line
+const HELP = `compass — goals, tasks, habits, books, journal and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
@@ -49,7 +56,7 @@ Usage:
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE]
-                   [--ongoing PATH] [--notes T] [--focus]
+                   [--ongoing PATH] [--notes T] [--location T] [--focus]
   compass task add --stdin [options]    one task per line ("title" --due fri …), all in one commit;
                                         options given here apply to every line
   compass task done|undo|drop|focus|unfocus|show <task>
@@ -57,7 +64,7 @@ Usage:
   compass task drop <task> --stop       a repeating task: no next occurrence
   compass task move <task> [DATE]       default: tomorrow
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
-                   [--ongoing PATH] [--notes T]          (none clears a field)
+                   [--ongoing PATH] [--notes T] [--location T]   (none clears a field)
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
   compass habits [--domain D | --cwd PATH] [--archived]
   compass habit add "title" (--domain D | --cwd PATH) --freq F [--notes T]
@@ -65,9 +72,27 @@ Usage:
   compass habit edit <habit> [--title T] [--domain D] [--freq F] [--notes T]
   compass habit archive|unarchive <habit>
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
+  compass books [--domain D | --cwd PATH] [--status S]
+  compass book find "text"              search Open Library
+  compass book add "title" [--domain D | --cwd PATH] [--author A] [--status S] [--find]   (no domain: general reading)
+                                        --find: author and cover from the first Open Library match
+  compass book want|reading|read|dropped <book>   sets the dates: started on reading, finished on read/dropped
+  compass book rate <book> 1-5|none
+  compass book quote <book> "text" [--page N] | --remove <quote>
+  compass book edit <book> [--title T] [--author A] [--domain D|none] [--notes T] [--started DATE] [--finished DATE]
+  compass book show <book>
+  compass book delete <book> --yes
+  compass journal [DATE]                one day (default today); the journal is encrypted: the password
+                                        comes from $COMPASS_PASSPHRASE or the keyring (secret-tool)
+  compass journal days [--last N]       the last N days (default 7)
+  compass journal search "text"
+  compass journal write "text" [--date DATE]   replaces that day's text ("none" clears it)
+  compass journal note "text" [--date DATE]    adds a note
+  compass journal unnote <note> [--date DATE]
   compass domains
-  compass domain add <id> [--name N] [--parent P] [--path DIR] [--color C]
-  compass domain edit <id> [--name N] [--color C|none] [--add-path DIR] [--remove-path DIR]
+  compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
+  compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
+  compass domain delete <id> --yes      only an empty one: no sub-domains, tasks, goals, habits or books
   compass goals [--past|--archived|--all] [--category C]
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
                    [--target N] [--unit U] [--deadline YYYY-MM-DD]
@@ -82,31 +107,38 @@ Usage:
 
 <task>, <goal>: an id (t_…, g_…) or part of the title. D: a domain id or name. --cwd: the domain whose
 "paths" contain that folder (a subdomain also sees the dated items of its parents).
-DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
+--path, --add-path and --remove-path can be repeated. S: want, reading, read, dropped. DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
 weekdays, monthly, monthly:15, none. F (habits): daily, 3/week (any days), mon,thu.
 --no-sync skips git pull/push; --timeout S limits the pull (default 3 s for today, 20 s otherwise).
 Config: ~/.config/compass/config.json →
   {"repo": "<data repo checkout>", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json"}`;
 
 /** Flags that never take a value. */
-const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes', 'stdin']);
+const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes', 'stdin', 'find']);
 
-/** @param {string[]} argv */
+/**
+ * `flags` keeps the last value of each flag; `lists` keeps every value of a repeated one (`--path A --path B`).
+ * @param {string[]} argv
+ */
 function parse(argv) {
   /** @type {string[]} */
   const pos = [];
   /** @type {Record<string, string | true>} */
   const flags = {};
+  /** @type {Record<string, string[]>} */
+  const lists = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
       const next = argv[i + 1];
-      if (!BOOLEAN.has(name) && next !== undefined && !next.startsWith('--')) flags[name] = argv[++i];
-      else flags[name] = true;
+      if (!BOOLEAN.has(name) && next !== undefined && !next.startsWith('--')) {
+        flags[name] = argv[++i];
+        (lists[name] ??= []).push(argv[i]);
+      } else flags[name] = true;
     } else pos.push(a);
   }
-  return { pos, flags };
+  return { pos, flags, lists };
 }
 
 /**
@@ -209,6 +241,7 @@ function taskLine(t, ctx, opts = {}) {
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
   if (t.subtasks.length) bits.push(`sub ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
+  if (t.location) bits.push(`@ ${t.location}`);
   if (t.notes) bits.push('notes');
   if (t.status !== 'open' && t.doneAt) bits.push(`${t.status} ${periodKey('day', new Date(t.doneAt), ctx.tz)}`);
   return `${mark} [${t.id}] ${t.title}${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
@@ -299,7 +332,7 @@ function pickZone(...zones) {
 }
 
 async function main() {
-  const { pos, flags } = parse(process.argv.slice(2));
+  const { pos, flags, lists } = parse(process.argv.slice(2));
   const [cmd, sub, ...rest] = pos;
   if (!cmd || cmd === 'help' || flags.help) {
     console.log(HELP);
@@ -336,6 +369,7 @@ async function main() {
     cfg, now, sync, tz, gtz: isValidTimeZone(goalsDoc.timeZone) ? goalsDoc.timeZone : tz, today: periodKey('day', now, tz),
     goals: goalsDoc, tasks: tasksDoc, domains: domains.normalize(readJsonIfExists(cfg, cfg.domains) ?? domains.emptyDoc()),
     habits: habits.normalize(readJsonIfExists(cfg, cfg.habits) ?? habits.emptyDoc()),
+    books: books.normalize(readJsonIfExists(cfg, cfg.books) ?? books.emptyDoc()),
   };
 
   switch (cmd) {
@@ -343,11 +377,14 @@ async function main() {
     case 'tasks': return listTasks(ctx, flags);
     case 'task': return task(ctx, sub, rest, flags);
     case 'domains': return listDomains(ctx);
-    case 'domain': return domain(ctx, sub, rest, flags);
+    case 'domain': return domain(ctx, sub, rest, flags, lists);
     case 'goals': return listGoals(ctx, flags);
     case 'goal': return goal(ctx, sub, rest, flags);
     case 'habits': return listHabits(ctx, flags);
     case 'habit': return habit(ctx, sub, rest, flags);
+    case 'books': return listBooks(ctx, flags);
+    case 'book': return book(ctx, sub, rest, flags);
+    case 'journal': return journalCmd(ctx, sub, rest, flags);
     default: fail(`unknown command “${cmd}” (compass help)`);
   }
 }
@@ -479,7 +516,7 @@ function task(ctx, sub, rest, flags) {
     const repeat = str(opts.repeat) ? rule(/** @type {string} */ (str(opts.repeat)), due ?? ctx.today) : null;
     const t = tasks.newTask({
       title, domain: /** @type {string} */ (scope.id), due: repeat && !due ? tasks.firstDue(repeat, ctx.today) : due,
-      repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)),
+      repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)), location: orNull(str(opts.location)),
     }, ctx.now);
     return { t, focus: !!opts.focus };
   };
@@ -575,7 +612,7 @@ function task(ctx, sub, rest, flags) {
           fields.repeat = rule(/** @type {string} */ (str(flags.repeat)), fields.due ?? t.due ?? ctx.today);
           if (fields.repeat && !(fields.due ?? t.due)) fields.due = tasks.firstDue(fields.repeat, ctx.today);
         }
-        for (const k of /** @type {const} */ (['notes', 'ongoing'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
+        for (const k of /** @type {const} */ (['notes', 'ongoing', 'location'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
         if (!Object.keys(fields).length) fail('nothing to edit');
         build = () => ({ tasks: [{ type: 'edit', id: tid, fields }] });
         break;
@@ -659,17 +696,17 @@ function listDomains(ctx) {
   };
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
   for (const d of doc.domains) print(d, 0); // left out by a cycle
-  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain)])]
+  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.books.books.map((b) => b.domain)])]
     .filter((c) => c && !domains.domainOfCategory(doc, c));
-  if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks or habits): ${loose.join(', ')}`);
+  if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks, habits or books): ${loose.join(', ')}`);
   for (const p of domains.validate(doc)) console.error(`warning: ${p}`);
 }
 
 /**
  * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
- * @param {Record<string, string | true>} flags
+ * @param {Record<string, string | true>} flags @param {Record<string, string[]>} lists
  */
-function domain(ctx, sub, rest, flags) {
+function domain(ctx, sub, rest, flags, lists) {
   const id = rest[0];
   if (!domains.isValidId(id)) fail('which domain? an id like "studies" or "studies/course-a" (no spaces)');
   /** @param {string} p */
@@ -683,7 +720,8 @@ function domain(ctx, sub, rest, flags) {
     /** @type {import('../lib/domains.js').Domain} */
     const d = { id, name: str(flags.name) ?? id.slice(id.lastIndexOf('/') + 1) };
     if (parent) d.parent = parent;
-    if (str(flags.path)) d.paths = [domains.cleanPath(abs(/** @type {string} */ (str(flags.path))))];
+    const paths = [...new Set((lists.path ?? []).map((p) => domains.cleanPath(abs(p))))];
+    if (paths.length) d.paths = paths;
     if (str(flags.color)) d.color = str(flags.color);
     ops = [{ type: 'add', domain: d }];
   } else if (sub === 'edit') {
@@ -691,9 +729,24 @@ function domain(ctx, sub, rest, flags) {
     ops = [];
     const color = str(flags.color);
     if (str(flags.name) || color) ops.push({ type: 'edit', id, fields: { ...(str(flags.name) ? { name: str(flags.name) } : {}), ...(color ? { color: orNull(color) } : {}) } });
-    if (str(flags['add-path'])) ops.push({ type: 'addPath', id, path: abs(/** @type {string} */ (str(flags['add-path']))) });
-    if (str(flags['remove-path'])) ops.push({ type: 'removePath', id, path: abs(/** @type {string} */ (str(flags['remove-path']))) });
+    for (const p of lists['add-path'] ?? []) ops.push({ type: 'addPath', id, path: abs(p) });
+    for (const p of lists['remove-path'] ?? []) ops.push({ type: 'removePath', id, path: abs(p) });
     if (!ops.length) fail('nothing to edit');
+  } else if (sub === 'delete') {
+    if (!domains.find(ctx.domains, id)) fail(`unknown domain “${id}”`);
+    const kids = domains.children(ctx.domains, id);
+    if (kids.length) fail(`“${id}” has sub-domains (${kids.map((d) => d.id).join(', ')}); delete or move them first`);
+    /** @param {string|null} text */
+    const here = (text) => !!text && domains.canonical(ctx.domains, text) === id;
+    const used = [
+      ['tasks', ctx.tasks.tasks.filter((t) => here(t.domain)).length],
+      ['goals', ctx.goals.goals.filter((g) => here(g.category)).length],
+      ['habits', ctx.habits.habits.filter((x) => here(x.domain)).length],
+      ['books', ctx.books.books.filter((b) => here(b.domain)).length],
+    ].filter(([, n]) => n);
+    if (used.length) fail(`“${id}” is still used by ${used.map(([what, n]) => `${n} ${what}`).join(', ')}; move them first`);
+    if (!flags.yes) fail(`delete removes the domain “${id}” for good. Add --yes to delete it.`);
+    ops = [{ type: 'delete', id }];
   } else {
     return fail(`unknown domain action “${sub}” (compass help)`);
   }
@@ -813,6 +866,277 @@ function habit(ctx, sub, rest, flags) {
   report(res, ctx.sync);
   const saved = habits.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.habits)).habits.find((x) => x.id === id);
   if (saved) console.log(habitLine(saved, ctx));
+}
+
+/**
+ * One line per book: status, author, rating, dates and domain.
+ * @param {Book} b @param {{ domain?: boolean }} [opts]
+ */
+function bookLine(b, opts = {}) {
+  const mark = { reading: '▸', want: '·', read: '✓', dropped: '✗' }[b.status];
+  const bits = [books.STATUS_TEXT[b.status].toLowerCase()];
+  if (b.author) bits.push(b.author);
+  if (b.rating) bits.push('★'.repeat(b.rating));
+  if (b.started || b.finished) bits.push([b.started ?? '?', b.finished ?? ''].join(' → ').replace(/ → $/, ''));
+  if (b.quotes.length) bits.push(`${b.quotes.length} quote${b.quotes.length === 1 ? '' : 's'}`);
+  if (b.notes) bits.push('notes');
+  if (opts.domain !== false && b.domain) bits.push(b.domain);
+  return `${mark} [${b.id}] ${b.title} — ${bits.join(' · ')}`;
+}
+
+/** @param {BooksDoc} doc @param {string | undefined} ref @returns {Book} */
+function findBook(doc, ref) {
+  if (!ref) fail('which book? (id or part of the title)');
+  const byId = doc.books.find((x) => x.id === ref);
+  if (byId) return byId;
+  const q = ref.toLowerCase();
+  const pool = doc.books.filter((x) => x.title.toLowerCase().includes(q));
+  if (pool.length === 1) return pool[0];
+  if (!pool.length) fail(`no book matches “${ref}”`);
+  return fail(`“${ref}” matches several books:\n${pool.map((x) => `  [${x.id}] ${x.title}`).join('\n')}`);
+}
+
+/** @param {Ctx} ctx @param {Record<string, string | true>} flags */
+function listBooks(ctx, flags) {
+  const scope = scopeFrom(ctx, flags);
+  if (scope.note && !scope.id) console.error(`note: ${scope.note}; listing every domain`);
+  const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
+  const status = str(flags.status) ? attempt(() => books.parseStatus(/** @type {string} */ (str(flags.status)))) : null;
+  const list = ctx.books.books
+    .filter((b) => (!own || (b.domain && own.has(domains.canonical(ctx.domains, b.domain)))) && (!status || b.status === status))
+    .sort(books.byStatus);
+  if (!list.length) console.log('No books.');
+  for (const b of list) console.log(bookLine(b));
+}
+
+/** @param {Book} b */
+function showBook(b) {
+  console.log(bookLine(b));
+  if (b.olid || b.cover) console.log(`  Open Library: ${[b.olid && `${books.OPEN_LIBRARY}/works/${b.olid}`, b.cover && books.coverUrl(b.cover)].filter(Boolean).join(' · ')}`);
+  if (b.notes) console.log(b.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
+  for (const q of b.quotes) console.log(`  “${q.text}”${q.page ? ` (p. ${q.page})` : ''} [${q.id}]`);
+}
+
+/** Open Library search with a time limit. @param {string} query @param {number} [limit] */
+async function findOnline(query, limit) {
+  try {
+    return await books.search(query, { limit, signal: AbortSignal.timeout(NET_TIMEOUT) });
+  } catch (e) {
+    return fail(`could not search Open Library: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** @param {books.Found} f */
+const foundLine = (f) => `${f.title} — ${[f.author, f.year, f.olid].filter(Boolean).join(' · ')}`;
+
+/**
+ * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
+ * @param {Record<string, string | true>} flags
+ */
+async function book(ctx, sub, rest, flags) {
+  /** @param {string} raw @param {string} what @param {number} min @param {number} [max] */
+  const int = (raw, what, min, max = Infinity) => {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < min || n > max) fail(`${what} must be a whole number${max < Infinity ? ` from ${min} to ${max}` : ` of at least ${min}`}`);
+    return n;
+  };
+  /** @type {books.Op[]} */
+  let ops;
+  /** @type {string} */
+  let id;
+  if (sub === 'find') {
+    const query = rest.join(' ').trim();
+    if (!query) fail('book find needs some text: compass book find "title or author"');
+    const found = await findOnline(query, 8);
+    if (!found.length) console.log('Nothing found.');
+    for (const f of found) console.log(foundLine(f));
+    return;
+  }
+  if (sub === 'add') {
+    const title = rest[0] ?? str(flags.title);
+    if (!title) fail('book add needs a title: compass book add "title" [--domain D]');
+    // No domain (or a folder of none): general reading.
+    const domain = scopeFrom(ctx, flags).id;
+    /** @type {Partial<Book>} */
+    const fields = { author: orNull(str(flags.author)) };
+    if (flags.find) {
+      const [f] = await findOnline([title, fields.author].filter(Boolean).join(' '), 1);
+      if (!f) console.error('note: nothing found on Open Library; added without cover');
+      else {
+        console.log(`Open Library: ${foundLine(f)}`);
+        Object.assign(fields, { author: fields.author ?? f.author, olid: f.olid, cover: f.cover });
+      }
+    }
+    let b = books.newBook({ title, domain, ...fields }, ctx.now);
+    const status = str(flags.status) ? attempt(() => books.parseStatus(/** @type {string} */ (str(flags.status)))) : 'want';
+    b = { ...b, ...books.withStatus(b, status, ctx.today) };
+    id = b.id;
+    ops = [{ type: 'add', book: b }];
+  } else {
+    const b = findBook(ctx.books, rest[0]);
+    id = b.id;
+    switch (sub) {
+      case 'show':
+        return showBook(b);
+      case 'want':
+      case 'reading':
+      case 'read':
+      case 'dropped':
+        ops = [{ type: 'status', id, status: sub, today: ctx.today }];
+        break;
+      case 'rate':
+        if (!rest[1]) fail('which rating? compass book rate <book> 1-5 (or none)');
+        ops = [{ type: 'edit', id, fields: { rating: orNull(rest[1]) === null ? null : int(rest[1], 'the rating', 1, 5) } }];
+        break;
+      case 'quote': {
+        const remove = str(flags.remove);
+        if (remove) {
+          if (!b.quotes.some((q) => q.id === remove)) fail(`“${b.title}” has no quote ${remove} (compass book show)`);
+          ops = [{ type: 'removeQuote', id, quoteId: remove }];
+          break;
+        }
+        const text = rest[1]?.trim();
+        if (!text) fail('which quote? compass book quote <book> "text" [--page N]');
+        const page = str(flags.page) ? int(/** @type {string} */ (str(flags.page)), '--page', 1) : null;
+        ops = [{ type: 'addQuote', id, quote: { id: books.newId('q_'), text, page } }];
+        break;
+      }
+      case 'edit': {
+        /** @type {books.BookFields} */
+        const fields = {};
+        if (str(flags.title)) fields.title = str(flags.title);
+        if (str(flags.author) !== undefined) fields.author = orNull(str(flags.author));
+        if (str(flags.domain)) fields.domain = orNull(str(flags.domain)) === null ? null : domainRef(ctx, /** @type {string} */ (str(flags.domain)));
+        if (str(flags.notes) !== undefined) fields.notes = orNull(str(flags.notes));
+        for (const k of /** @type {const} */ (['started', 'finished'])) {
+          if (str(flags[k]) !== undefined) fields[k] = attempt(() => tasks.parseDue(/** @type {string} */ (str(flags[k])), ctx.today));
+        }
+        if (!Object.keys(fields).length) fail('nothing to change: --title, --author, --domain, --notes, --started or --finished');
+        ops = [{ type: 'edit', id, fields }];
+        break;
+      }
+      case 'delete':
+        if (!flags.yes) fail(`delete removes “${b.title}” with its notes and quotes for good. Add --yes to delete it.`);
+        ops = [{ type: 'delete', id }];
+        break;
+      default:
+        return fail(`unknown book action “${sub}” (compass help)`);
+    }
+  }
+  const res = commitChange(ctx.cfg, ctx.cfg.books, (raw) => {
+    const before = raw ? books.normalize(raw) : books.emptyDoc(ctx.tz);
+    const after = books.applyOps(before, ops);
+    if (books.serialize(after) === books.serialize(before)) return null;
+    return { text: books.serialize(after), message: books.commitMessage(ops, before, after) };
+  }, { sync: ctx.sync });
+  report(res, ctx.sync);
+  const saved = books.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.books)).books.find((x) => x.id === id);
+  if (saved) console.log(bookLine(saved));
+}
+
+/** The passphrase of this computer, or an error that says how to set it. */
+function needPassphrase() {
+  const pass = cryptSync.passphrase();
+  if (!pass) fail('no encryption password on this computer. Store it (it asks for it) with:\n  secret-tool store --label="compass encryption" service compass key encryption');
+  return pass;
+}
+
+/**
+ * The journal as it is in the repo, opened.
+ * @param {Ctx} ctx @param {string} pass
+ * @returns {JournalDoc}
+ */
+function readJournal(ctx, pass) {
+  const raw = readJsonIfExists(ctx.cfg, ctx.cfg.journal);
+  if (!raw) return journal.emptyDoc(ctx.tz);
+  if (!cryptSync.isSealed(raw)) fail(`${ctx.cfg.journal} is not sealed; the journal is only kept encrypted`);
+  return journal.normalize(JSON.parse(attempt(() => cryptSync.openSync(raw, pass)).text));
+}
+
+/** @param {import('../lib/journal.js').Day} d */
+function printDay(d) {
+  console.log(`# ${d.date}`);
+  if (d.text) console.log(d.text);
+  for (const n of d.notes) console.log(`- ${n.text} [${n.id}]`);
+  if (!d.text && !d.notes.length) console.log('(nothing written)');
+}
+
+/**
+ * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
+ * @param {Record<string, string | true>} flags
+ */
+function journalCmd(ctx, sub, rest, flags) {
+  const pass = needPassphrase();
+  const doc = readJournal(ctx, pass);
+  /** @param {string|undefined} raw */
+  const day = (raw) => {
+    if (!raw) return ctx.today;
+    const text = raw.trim().toLowerCase();
+    const back = /^-(\d+)$/.exec(text);
+    const date = text === 'yesterday' ? addDays(ctx.today, -1) : back ? addDays(ctx.today, -Number(back[1])) : attempt(() => tasks.parseDue(text, ctx.today));
+    if (!date) fail('which day? (today, yesterday, -N or YYYY-MM-DD)');
+    if (date > ctx.today) fail(`${date} has not come yet`);
+    return date;
+  };
+  /** @type {journal.Op[]} */
+  let ops;
+  switch (sub) {
+    case undefined:
+    case 'show':
+      return printDay(journal.dayOf(doc, day(sub === 'show' ? rest[0] : undefined)));
+    case 'days': {
+      const n = str(flags.last) ? positive(/** @type {string} */ (str(flags.last)), '--last') : 7;
+      const from = addDays(ctx.today, 1 - n);
+      const list = doc.days.filter((d) => d.date >= from);
+      if (!list.length) console.log(`Nothing written in the last ${n} days.`);
+      list.forEach((d, i) => { if (i) console.log(''); printDay(d); });
+      return;
+    }
+    case 'search': {
+      const q = rest.join(' ').trim();
+      if (!q) fail('search for what? compass journal search "word"');
+      const list = journal.search(doc, q);
+      if (!list.length) console.log('Nothing found.');
+      list.forEach((d, i) => { if (i) console.log(''); printDay(d); });
+      return;
+    }
+    case 'write': {
+      const text = rest[0];
+      if (text === undefined) fail('write what? compass journal write "text" [--date D] (replaces that day\'s text; "none" clears it)');
+      ops = [{ type: 'setText', date: day(str(flags.date)), text: orNull(text) }];
+      break;
+    }
+    case 'note': {
+      const text = rest[0]?.trim();
+      if (!text) fail('which note? compass journal note "text" [--date D]');
+      ops = [{ type: 'addNote', date: day(str(flags.date)), note: journal.newNote(text, ctx.now) }];
+      break;
+    }
+    case 'unnote': {
+      const date = day(str(flags.date));
+      if (!journal.dayOf(doc, date).notes.some((n) => n.id === rest[0])) fail(`${date} has no note ${rest[0] ?? '?'} (compass journal ${date})`);
+      ops = [{ type: 'removeNote', date, id: /** @type {string} */ (rest[0]) }];
+      break;
+    }
+    default:
+      // A date on its own: show that day.
+      if (/^(\d{4}-\d{2}-\d{2}|today|yesterday|-\d+)$/.test(sub)) return printDay(journal.dayOf(doc, day(sub)));
+      return fail(`unknown journal action “${sub}” (compass help)`);
+  }
+  const res = commitChange(ctx.cfg, ctx.cfg.journal, (raw) => {
+    let salt = null;
+    let before = journal.emptyDoc(ctx.tz);
+    if (raw) {
+      if (!cryptSync.isSealed(raw)) fail(`${ctx.cfg.journal} is not sealed`);
+      const opened = attempt(() => cryptSync.openSync(raw, pass));
+      salt = opened.salt;
+      before = journal.normalize(JSON.parse(opened.text));
+    }
+    const after = journal.applyOps(before, ops);
+    if (journal.serialize(after) === journal.serialize(before)) return null;
+    return { text: cryptSync.sealSync(journal.serialize(after), pass, salt), message: journal.commitMessage(ops) };
+  }, { sync: ctx.sync });
+  report(res, ctx.sync);
 }
 
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */

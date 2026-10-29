@@ -1,25 +1,31 @@
 // @ts-check
-import { LS, STORES, canEdit, current, goalsStore, loaded, online, persist, refresh, render, setRender, state, tz } from './core/data.js';
+import { ALL_STORES, LS, STORES, canEdit, current, goalsStore, loaded, online, persist, refresh, render, setRender, state, tz } from './core/data.js';
 import { $, h, lsGet, lsSet } from './core/ui.js';
 import { openGoalForm, openManage, renderList, renderToolbar, syncFormVisibility } from './modules/goals/view.js';
 import { openTaskForm } from './modules/tasks/view.js';
 import { openHabitForm } from './modules/habits/view.js';
 import { renderHabitsView } from './views/habits.js';
+import { openBookForm } from './modules/books/view.js';
+import { renderBooksView } from './views/books.js';
+import { openJournal, openPassphrase, renderJournalView } from './modules/journal/view.js';
 import { renderAreas, renderNavAreas } from './views/areas.js';
 import { GOALS_FILE, openSettings } from './views/settings.js';
 import { renderHome } from './views/home.js';
 import { renderTodayView } from './views/today.js';
 import { civilDate, periodKeys } from '../lib/period.js';
 
-/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'more'} Tab */
+/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'books'|'journal'|'more'} Tab */
 
 /** @type {Tab[]} */
-const TABS = ['home', 'today', 'areas', 'goals', 'habits', 'more'];
+const TABS = ['home', 'today', 'areas', 'goals', 'habits', 'books', 'journal', 'more'];
 
 /** @type {Record<Tab, string>} */
-const TAB_TITLE = { home: 'Home', today: 'Today', areas: 'Areas', goals: 'Goals', habits: 'Habits', more: 'More' };
+const TAB_TITLE = { home: 'Home', today: 'Today', areas: 'Areas', goals: 'Goals', habits: 'Habits', books: 'Books', journal: 'Journal', more: 'More' };
 
 function renderAll() {
+  // A redraw replaces the fields: put the cursor back in the one being typed in (the journal's, for example).
+  const active = /** @type {HTMLInputElement|null} */ (document.activeElement);
+  const focus = active?.id && !active.closest('dialog') ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
   renderTabs();
   renderDate();
   renderStatus();
@@ -27,6 +33,8 @@ function renderAll() {
   if (state.tab === 'today') renderTodayView();
   if (state.tab === 'areas') renderAreas();
   if (state.tab === 'habits') renderHabitsView();
+  if (state.tab === 'books') renderBooksView();
+  if (state.tab === 'journal') renderJournalView();
   if (state.tab === 'goals') {
     renderToolbar();
     renderList();
@@ -34,6 +42,11 @@ function renderAll() {
   /** @type {HTMLButtonElement} */ ($('add')).disabled = !canEdit();
   /** @type {HTMLButtonElement} */ ($('manage')).disabled = !canEdit();
   /** @type {HTMLButtonElement} */ ($('open-manage')).disabled = !canEdit();
+  const again = focus && /** @type {HTMLInputElement|null} */ (document.getElementById(focus.id));
+  if (again && again !== document.activeElement) {
+    again.focus();
+    try { again.setSelectionRange(focus.start, focus.end); } catch { /* not a text field */ }
+  }
 }
 
 function renderTabs() {
@@ -72,8 +85,8 @@ function renderDate() {
 }
 
 function renderStatus() {
-  const saving = STORES.some((st) => st.state.saving);
-  const pending = STORES.some((st) => st.state.pending.length);
+  const saving = ALL_STORES.some((st) => st.state.saving);
+  const pending = ALL_STORES.some((st) => st.state.pending.length);
   const error = STORES.map((st) => st.state.error).find(Boolean);
   const status = $('status');
   let text = '';
@@ -107,7 +120,7 @@ function renderStatus() {
 }
 
 function retry() {
-  for (const st of STORES) st.state.error = null;
+  for (const st of ALL_STORES) st.state.error = null;
   refresh();
 }
 
@@ -179,6 +192,7 @@ function init() {
       const kind = /** @type {HTMLElement} */ (btn).dataset.switch;
       if (kind === 'goal') openGoalForm();
       else if (kind === 'habit') openHabitForm();
+      else if (kind === 'book') openBookForm();
       else openTaskForm();
     });
   }
@@ -187,20 +201,24 @@ function init() {
   $('settings').addEventListener('click', openSettings);
   $('manage').addEventListener('click', openManage);
   $('open-manage').addEventListener('click', openManage);
+  $('open-journal').addEventListener('click', () => openJournal());
+  $('open-passphrase').addEventListener('click', openPassphrase);
   $('task-dialog').addEventListener('close', () => render());
   $('habit-dialog').addEventListener('close', () => render());
   $('habit-cal-dialog').addEventListener('close', () => render());
+  $('book-form-dialog').addEventListener('close', () => render());
+  $('book-dialog').addEventListener('close', () => render());
   const goalForm = /** @type {HTMLFormElement} */ ($('goal-form'));
   goalForm.addEventListener('change', () => syncFormVisibility(goalForm));
   for (const btn of document.querySelectorAll('[data-close]')) {
     btn.addEventListener('click', () => /** @type {HTMLDialogElement} */ (btn.closest('dialog')).close());
   }
 
-  window.addEventListener('online', () => { for (const st of STORES) st.state.online = true; refresh(); });
+  window.addEventListener('online', () => { for (const st of ALL_STORES) st.state.online = true; refresh(); });
   window.addEventListener('offline', () => render());
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      for (const st of STORES) if (st.state.pending.length) st.flush();
+      for (const st of ALL_STORES) if (st.state.pending.length) st.flush();
     } else {
       refresh();
     }
