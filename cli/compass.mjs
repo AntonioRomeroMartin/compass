@@ -14,6 +14,7 @@ import * as habits from '../lib/habits.js';
 import * as books from '../lib/books.js';
 import * as journal from '../lib/journal.js';
 import * as cryptSync from './crypt.mjs';
+import { webcrypto } from 'node:crypto';
 import { buildToday } from '../lib/today.js';
 import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, readJsonIfExists } from './repo.mjs';
 
@@ -30,6 +31,10 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
 /** @typedef {import('../lib/books.js').BooksDoc} BooksDoc */
 /** @typedef {import('../lib/journal.js').JournalDoc} JournalDoc */
 /** @typedef {import('./repo.mjs').Config} Config */
+
+// lib/ uses the Web Crypto global, which Node only exposes from v19 on: give older Node (e.g. a
+// distribution's system node, picked when no version manager is loaded) the same object.
+if (!globalThis.crypto) globalThis.crypto = /** @type {Crypto} */ (/** @type {unknown} */ (webcrypto));
 
 /**
  * What every command works with.
