@@ -24,9 +24,13 @@ Each user's data lives in their own private repo.
 - Data commits use the prefix of the file they change (`goals:`, `tasks:`, `domains:`); code commits, `compass:`.
 - New logic goes in `lib/` and is used by both sides; never duplicated between app and CLI.
 - Before pushing: `node --test tests/*.test.mjs`. A new file the app loads goes in `SHELL` (`sw.js`; `tests/sw.test.mjs` fails otherwise); there is no version to bump.
-- Publishing: work on a branch, open a PR, check that its diff is only what was asked (and try it in the preview if it
-  shows on screen), then `gh pr merge <n> --auto --squash`. GitHub merges it once the `test` check
-  (`.github/workflows/tests.yml`) passes and deletes the branch; `main` requires that check, for admins too.
+- Publishing: one PR per piece of work you can describe in one sentence (tweaks asked while trying it go on the same
+  branch; an urgent fix, an unrelated change or a risky one gets its own). Check that its diff is only what was asked,
+  then `gh pr merge <n> --auto --squash`. GitHub merges it once the `test` check (`.github/workflows/tests.yml`)
+  passes and deletes the branch; `main` requires that check, for admins too. Don't wait on or poll the check: a
+  failure is reported to the session.
+- Preview: only for changes that show on screen (for the CLI or logic the tests are enough). Check it by reading the
+  page's text; take screenshots only if something looks wrong or to show the end result (they cost the most).
 
 ## Saving progress
 As you go, without waiting for the end (the session may close without notice): after each important
