@@ -97,6 +97,7 @@ Usage:
   compass domains
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
+  compass domain move <id> --before <id>|--last   order among its siblings (as the app lists them)
   compass domain delete <id> --yes      only an empty one: no sub-domains, tasks, goals, habits or books
   compass goals [--past|--archived|--all] [--category C]
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
@@ -737,18 +738,26 @@ function domain(ctx, sub, rest, flags, lists) {
     for (const p of lists['add-path'] ?? []) ops.push({ type: 'addPath', id, path: abs(p) });
     for (const p of lists['remove-path'] ?? []) ops.push({ type: 'removePath', id, path: abs(p) });
     if (!ops.length) fail('nothing to edit');
+  } else if (sub === 'move') {
+    const d = domains.find(ctx.domains, id);
+    if (!d) fail(`unknown domain “${id}”`);
+    const before = str(flags.before);
+    if (!before && !flags.last) fail('where to? --before <sibling id> or --last');
+    if (before) {
+      const b = domains.find(ctx.domains, before);
+      if (!b || b.id === id || b.parent !== d?.parent) fail(`“${before}” is not a sibling of “${id}”`);
+    }
+    ops = [{ type: 'move', id, before: before ?? null }];
   } else if (sub === 'delete') {
     if (!domains.find(ctx.domains, id)) fail(`unknown domain “${id}”`);
     const kids = domains.children(ctx.domains, id);
     if (kids.length) fail(`“${id}” has sub-domains (${kids.map((d) => d.id).join(', ')}); delete or move them first`);
-    /** @param {string|null} text */
-    const here = (text) => !!text && domains.canonical(ctx.domains, text) === id;
-    const used = [
-      ['tasks', ctx.tasks.tasks.filter((t) => here(t.domain)).length],
-      ['goals', ctx.goals.goals.filter((g) => here(g.category)).length],
-      ['habits', ctx.habits.habits.filter((x) => here(x.domain)).length],
-      ['books', ctx.books.books.filter((b) => here(b.domain)).length],
-    ].filter(([, n]) => n);
+    const used = domains.usage(ctx.domains, id, {
+      tasks: ctx.tasks.tasks.map((t) => t.domain),
+      goals: ctx.goals.goals.map((g) => g.category),
+      habits: ctx.habits.habits.map((x) => x.domain),
+      books: ctx.books.books.map((b) => b.domain),
+    });
     if (used.length) fail(`“${id}” is still used by ${used.map(([what, n]) => `${n} ${what}`).join(', ')}; move them first`);
     if (!flags.yes) fail(`delete removes the domain “${id}” for good. Add --yes to delete it.`);
     ops = [{ type: 'delete', id }];

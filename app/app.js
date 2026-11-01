@@ -1,5 +1,5 @@
 // @ts-check
-import { ALL_STORES, LS, STORES, canEdit, current, goalsStore, loaded, online, persist, refresh, render, setRender, state, tz } from './core/data.js';
+import { ALL_STORES, LS, STORES, canEdit, current, loaded, online, persist, refresh, render, setRender, state, tz } from './core/data.js';
 import { $, h, lsGet, lsSet } from './core/ui.js';
 import { openGoalForm, openManage, renderList, renderToolbar, syncFormVisibility } from './modules/goals/view.js';
 import { openTaskForm } from './modules/tasks/view.js';
@@ -96,7 +96,14 @@ function renderStatus() {
   else if (pending) text = 'Pending changes…';
   else if (loaded()) text = 'Synced';
   else text = 'Loading…';
-  status.textContent = text;
+  // Offline: only an icon; what is changed meanwhile waits on this device.
+  if (state.cfg && !online()) {
+    status.replaceChildren(cloudOff());
+    status.title = pending ? 'Offline · changes saved on this device, uploaded when back online' : 'Offline';
+  } else {
+    status.textContent = text;
+    status.title = '';
+  }
   status.dataset.state = !online() ? 'offline' : pending || saving ? 'busy' : 'ok';
 
   const banner = $('banner');
@@ -106,17 +113,22 @@ function renderStatus() {
   if (!state.cfg) {
     banner.append('Connect to GitHub to get started. ', h('button', { class: 'link', onclick: openSettings }, 'Set up'));
     banner.hidden = false;
-  } else if (!online()) {
-    const at = goalsStore.state.fetchedAt;
-    const when = at ? new Date(at).toLocaleString('en-GB', { timeZone: tz() }) : 'never';
-    banner.append(`Offline: showing saved data (${when}). Editing is disabled.`);
-    banner.dataset.kind = 'warn';
-    banner.hidden = false;
-  } else if (error) {
+  } else if (online() && error) {
     banner.append(error, ' ', h('button', { class: 'link', onclick: retry }, 'Retry'));
     banner.dataset.kind = 'error';
     banner.hidden = false;
   }
+}
+
+/** A crossed-out cloud (offline). */
+function cloudOff() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('aria-label', 'Offline');
+  svg.innerHTML = '<path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.3 9.1 4.5 4.5 0 0 0 7 18z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M4 4l16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>';
+  return svg;
 }
 
 function retry() {

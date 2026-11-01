@@ -237,6 +237,17 @@ test('domain delete: only an empty domain, and with --yes', () => {
   assert.ok(!read('a', 'domains.json').domains.some((/** @type {any} */ d) => d.id === 'spare'));
 });
 
+test('domain move: order among siblings', () => {
+  const { run, runAll, read } = setupWithDomains();
+  const before = read('a', 'domains.json').domains.map((/** @type {any} */ d) => d.id);
+  const top = before.filter((/** @type {string} */ id) => !id.includes('/'));
+  run('domain', 'move', top[top.length - 1], '--before', top[0]);
+  const after = read('a', 'domains.json').domains.map((/** @type {any} */ d) => d.id).filter((/** @type {string} */ id) => !id.includes('/'));
+  assert.deepEqual(after, [top[top.length - 1], ...top.slice(0, -1)]);
+  assert.match(runAll('domain', 'move', 'studies/course-a', '--before', top[0]).stderr, /not a sibling/);
+  assert.match(runAll('domain', 'move', top[0]).stderr, /--before .* or --last/);
+});
+
 test('domain add and edit take several paths', () => {
   const { dir, run, read } = setup({ 'goals.json': GOALS });
   const [p1, p2, p3] = ['one', 'two', 'three'].map((x) => join(dir, 'work', x));
