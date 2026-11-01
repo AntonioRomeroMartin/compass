@@ -102,3 +102,47 @@ export function editRow(id, title, placeholder, addId) {
   li.append(input, h('button', { type: 'button', class: 'link danger', 'aria-label': 'Remove', onclick: () => li.remove() }, 'Remove'));
   return li;
 }
+
+/**
+ * A sheet made on the spot (for modules without markup in index.html): it is removed when closed.
+ * `draw` fills its body and runs again on `redraw`; `onClose` runs after it closes.
+ * @param {(body: HTMLElement, redraw: () => void, close: () => void) => void} draw
+ * @param {{ onClose?: () => void }} [opts]
+ */
+export function openSheet(draw, opts = {}) {
+  const body = h('div', { class: 'dialog-body' });
+  const dialog = h('dialog', { class: 'sheet' }, body);
+  const close = () => dialog.close();
+  const redraw = () => { body.replaceChildren(); draw(body, redraw, close); };
+  dialog.addEventListener('close', () => { dialog.remove(); opts.onClose?.(); });
+  document.body.append(dialog);
+  redraw();
+  dialog.showModal();
+  return { redraw, close };
+}
+
+/**
+ * A line chart of a series as inline SVG (no library): the values left to right, with the zero line.
+ * @param {number[]} values @param {{ label: string }} opts
+ */
+export function sparkline(values, { label }) {
+  const W = 300, H = 80, P = 4;
+  const xs = [0, ...values];
+  const lo = Math.min(0, ...xs), hi = Math.max(0, ...xs);
+  const y = (/** @type {number} */ v) => (hi === lo ? H / 2 : P + (hi - v) * (H - 2 * P) / (hi - lo));
+  const x = (/** @type {number} */ i) => (xs.length < 2 ? W / 2 : (i * W) / (xs.length - 1));
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('class', 'spark');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', label);
+  const ns = 'http://www.w3.org/2000/svg';
+  const zero = document.createElementNS(ns, 'line');
+  for (const [k, v] of Object.entries({ x1: 0, x2: W, y1: y(0), y2: y(0), class: 'spark-zero' })) zero.setAttribute(k, String(v));
+  const line = document.createElementNS(ns, 'polyline');
+  line.setAttribute('points', xs.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '));
+  line.setAttribute('class', `spark-line${xs[xs.length - 1] < 0 ? ' down' : ''}`);
+  svg.append(zero, line);
+  return svg;
+}

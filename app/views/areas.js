@@ -216,7 +216,7 @@ export function renderArea(view, id) {
     view.append(h(
       'section',
       { class: 'module-block' },
-      h('div', { class: 'block-head' }, h('h2', {}, m.title), h('button', { class: 'btn small', disabled: !canEdit(), onclick: () => m.add(scopeId) }, `+ ${m.addLabel}`)),
+      h('div', { class: 'block-head' }, h('h2', {}, m.title), m.add ? h('button', { class: 'btn small', disabled: !canEdit(), onclick: () => m.add?.(scopeId) }, `+ ${m.addLabel}`) : null),
       ...m.areaSections(scope),
     ));
   }

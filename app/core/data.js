@@ -6,6 +6,8 @@ import * as domainsLib from '../../lib/domains.js';
 import * as habitsLib from '../../lib/habits.js';
 import * as booksLib from '../../lib/books.js';
 import * as journalLib from '../../lib/journal.js';
+import * as tradesLib from '../../lib/trades.js';
+import * as financeLib from '../../lib/finance.js';
 import { isSealed, open, seal } from '../../lib/crypt.js';
 import { createStore } from './store.js';
 import { lsGet, lsSet } from './ui.js';
@@ -66,39 +68,78 @@ export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksS
 /** The encryption password of this device (one for every sealed file), or null. */
 export const passphrase = () => /** @type {string|null} */ (lsGet(LS.passphrase));
 
-/** Salt of the journal as last read: kept on write, so the key is not derived again. @type {string|null} */
-let journalSalt = null;
-
-// The journal is sealed with the encryption password; without it on this device it is neither read nor written.
-// It is not in STORES: its errors (a wrong password) show in the journal, not in the banner.
-export const journalStore = createStore({
-  mod: journalLib, file: 'journal.json', ls: 'compass.journal', empty: () => journalLib.emptyDoc(goalsStore.current().timeZone),
-  cfg, onChange: () => render(), ready: () => goalsStore.state.loaded, active: () => !!passphrase(),
-  codec: {
-    decode: async (text) => {
-      const raw = JSON.parse(text);
-      if (!isSealed(raw)) throw new Error('journal.json is not encrypted, so it is not opened.');
-      const opened = await open(raw, /** @type {string} */ (passphrase()));
-      journalSalt = opened.salt;
-      return opened.text;
+/**
+ * A file sealed with the encryption password (journal, trades, finance): without the password on this device it is
+ * neither read nor written. Sealed stores are not in STORES: their errors (a wrong password) show in their own blocks,
+ * not in the banner.
+ * @template D, O
+ * @param {import('./store.js').Module<D, O>} mod @param {string} file @param {string} ls @param {() => D} empty
+ */
+function sealedStore(mod, file, ls, empty) {
+  /** Salt as last read: kept on write, so the key is not derived again. @type {string|null} */
+  let salt = null;
+  const store = createStore({
+    mod, file, ls, empty, cfg, onChange: () => render(), ready: () => goalsStore.state.loaded, active: () => !!passphrase(),
+    codec: {
+      decode: async (text) => {
+        const raw = JSON.parse(text);
+        if (!isSealed(raw)) throw new Error(`${file} is not encrypted, so it is not opened.`);
+        const opened = await open(raw, /** @type {string} */ (passphrase()));
+        salt = opened.salt;
+        return opened.text;
+      },
+      encode: (text) => seal(text, /** @type {string} */ (passphrase()), salt),
     },
-    encode: (text) => seal(text, /** @type {string} */ (passphrase()), journalSalt),
-  },
-});
+  });
+  return Object.assign(store, { forgetSalt: () => { salt = null; } });
+}
 
-/** Every store, the journal too (to save pending changes or retry). */
-export const ALL_STORES = [...STORES, journalStore];
+export const journalStore = sealedStore(journalLib, 'journal.json', 'compass.journal', () => journalLib.emptyDoc(goalsStore.current().timeZone));
+
+export const tradesStore = sealedStore(tradesLib, 'trades.json', 'compass.trades', () => tradesLib.emptyDoc(goalsStore.current().timeZone));
+
+export const financeStore = sealedStore(financeLib, 'finance.json', 'compass.finance', () => financeLib.emptyDoc(goalsStore.current().timeZone));
+
+const SEALED = [journalStore, tradesStore, financeStore];
+
+/** Every store, the sealed ones too (to save pending changes or retry). */
+export const ALL_STORES = [...STORES, ...SEALED];
 
 /** Sets (or, with null, forgets) this device's encryption password and reads the journal again with it. @param {string|null} pass */
 export function setPassphrase(pass) {
   lsSet(LS.passphrase, pass);
-  journalSalt = null;
-  journalStore.reset();
-  journalStore.refresh();
+  for (const st of SEALED) {
+    st.forgetSalt();
+    st.reset();
+    st.refresh();
+  }
   render();
 }
 
-export const current = () => goalsStore.current();
+/**
+ * A module that counts the progress of some goals (their `source`, lib/goals.js): it gives their value and target,
+ * which it keeps itself (savings: in the sealed finance file), and stores the target set in the goal's sheet.
+ * @typedef {Object} GoalSource
+ * @property {[string, string][]} kinds  ways of counting it, as [value, text] for the goal's sheet
+ * @property {() => boolean} available   it can be read on this device (e.g. the password is set)
+ * @property {(g: import('../../lib/goals.js').Goal) => { value: number, target: number }|null} progress
+ * @property {(g: import('../../lib/goals.js').Goal) => { kind: string, target: number }|null} get
+ * @property {(goal: string, kind: any, target: number) => void} save
+ * @property {(goal: string) => void} remove
+ */
+
+/** Registered by the modules that count goals (finance: "savings"). @type {Record<string, GoalSource>} */
+export const goalSources = {};
+
+/** The goals file, with the progress and target of the goals another module counts filled in. */
+export function current() {
+  const doc = goalsStore.current();
+  if (!doc.goals.some((g) => g.source)) return doc;
+  return { ...doc, goals: doc.goals.map((g) => {
+    const p = g.source ? goalSources[g.source]?.progress(g) : null;
+    return p ? { ...g, progress: p.value, target: p.target } : g;
+  }) };
+}
 
 /** Time zone of the periods: the goals file's; if it has none, the device's. */
 export const tz = () => {
@@ -146,6 +187,18 @@ export function dispatchBooks(...ops) {
 export function dispatchJournal(...ops) {
   if (!canEdit() || !ops.length) return;
   journalStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/trades.js').Op} ops */
+export function dispatchTrades(...ops) {
+  if (!canEdit() || !ops.length) return;
+  tradesStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/finance.js').Op} ops */
+export function dispatchFinance(...ops) {
+  if (!canEdit() || !ops.length) return;
+  financeStore.dispatch(ops);
 }
 
 /** Civil date of today in the data's time zone. */

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://covers.openlibrary.org https://archive.org https://*.archive.org; connect-src https://api.github.com https://openlibrary.org; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://covers.openlibrary.org https://archive.org https://*.archive.org; connect-src 'self' https://api.github.com https://openlibrary.org; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#17171a" media="(prefers-color-scheme: dark)">
@@ -183,10 +183,13 @@
         <label>Target (optional)
           <input name="target" inputmode="decimal" placeholder="e.g. 4" autocomplete="off">
         </label>
-        <label>Unit
+        <label id="field-unit">Unit
           <input name="unit" maxlength="20" placeholder="sessions, km, pages…" autocomplete="off">
         </label>
       </div>
+      <label id="field-source" hidden>Progress
+        <select name="source"></select>
+      </label>
       <label>Related repo (optional)
         <input name="repo" maxlength="80" placeholder="e.g. my-project" autocomplete="off">
       </label>

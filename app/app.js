@@ -159,6 +159,12 @@ function init() {
     applyTheme(next);
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(lsGet(LS.theme)));
+  // Local preview with sample data (tools/serve.py --demo): /?demo connects to the server's stand-in for GitHub.
+  if (['localhost', '127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('demo')) {
+    lsSet(LS.cfg, { token: 'demo', owner: 'demo', repo: 'demo', path: GOALS_FILE, branch: 'main', api: '/demo-api' });
+    lsSet(LS.passphrase, 'demo');
+    history.replaceState(null, '', location.pathname);
+  }
   // Connections saved by older versions may name another path (data/goals.json): the files are at the root.
   const saved = lsGet(LS.cfg);
   state.cfg = saved && { ...saved, path: GOALS_FILE };
