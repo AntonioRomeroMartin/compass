@@ -29,8 +29,9 @@ Each user's data lives in their own private repo.
   then `gh pr merge <n> --auto --squash`. GitHub merges it once the `test` check (`.github/workflows/tests.yml`)
   passes and deletes the branch; `main` requires that check, for admins too. Don't wait on or poll the check: a
   failure is reported to the session.
-- Preview: only for changes that show on screen (for the CLI or logic the tests are enough). Check it by reading the
-  page's text; take screenshots only if something looks wrong or to show the end result (they cost the most).
+- Preview: only for changes that show on screen (for the CLI or logic the tests are enough). Open it for the user,
+  who judges how it looks; check that it works by reading the page's text. No screenshots, unless the user reports
+  something that looks wrong and it can't be found otherwise (they cost the most).
 
 ## Saving progress
 As you go, without waiting for the end (the session may close without notice): after each important
