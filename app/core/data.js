@@ -40,6 +40,8 @@ export const state = {
   /** day open on the Journal page ('' = today) and the text searched there */
   journalDate: '',
   journalQuery: '',
+  /** the Areas list is in edit mode (not kept across reloads) */
+  areasEdit: false,
 };
 
 export function persist() {
@@ -108,7 +110,8 @@ export const online = () => navigator.onLine && STORES.every((st) => st.state.on
 
 export const loaded = () => STORES.every((st) => st.state.loaded);
 
-export const canEdit = () => online() && goalsStore.state.loaded && !!state.cfg;
+// Offline too, on the copy saved on this device: the changes wait in the device and are uploaded when back online.
+export const canEdit = () => !!state.cfg && (goalsStore.state.loaded || !!goalsStore.state.fetchedAt);
 
 export async function refresh() {
   if (!state.cfg) return;
@@ -119,6 +122,12 @@ export async function refresh() {
 export function dispatchGoals(...ops) {
   if (!canEdit() || !ops.length) return;
   goalsStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/domains.js').Op} ops */
+export function dispatchDomains(...ops) {
+  if (!canEdit() || !ops.length) return;
+  domainsStore.dispatch(ops);
 }
 
 /** @param {...import('../../lib/habits.js').Op} ops */

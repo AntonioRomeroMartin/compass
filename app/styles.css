@@ -70,7 +70,8 @@ h1 { font-size: 1.6rem; margin: 0; letter-spacing: -.01em; }
 .status { font-size: .8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; }
 .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .status[data-state="busy"]::before { background: var(--warn); }
-.status[data-state="offline"]::before { background: var(--danger); }
+.status[data-state="offline"]::before { display: none; }
+.status[data-state="offline"] { color: var(--muted); }
 
 .banner { border-radius: var(--radius); padding: 10px 14px; margin: 8px 0; background: var(--accent-soft); font-size: .92rem; }
 .banner[data-kind="warn"] { background: var(--warn-soft); color: var(--warn); }
@@ -249,6 +250,20 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 .link.back { text-decoration: none; font-size: .95rem; }
 .sub-filter { margin-bottom: 4px; }
 .empty.small { padding: 16px 0; }
+
+/* areas, edit mode: drag handle, name field, delete; sub-areas indented below their area */
+.edit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.edit-list > li { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; display: grid; gap: 6px; }
+.edit-list.sub { gap: 4px; padding-left: 22px; }
+.edit-list.sub > li { border: none; padding: 0; background: none; }
+.edit-row { display: flex; align-items: center; gap: 8px; }
+.edit-row input { flex: 1; min-width: 0; }
+.edit-list:not(.sub) > li > .edit-row input { font-weight: 600; }
+.drag { cursor: grab; touch-action: none; user-select: none; color: var(--muted); font-size: 1.1rem; padding: 4px 2px; }
+.edit-list li.dragging { opacity: .6; outline: 2px solid var(--accent); }
+.add-sub { justify-self: start; font-size: .85rem; margin-left: 30px; }
+.add-area, input.new-area { margin-top: 12px; }
+.edit-list input.new-area { margin: 0 0 0 30px; width: calc(100% - 30px); }
 
 /* sidebar: areas tree under "Areas", a small indent per level */
 .nav-areas { display: none; }
