@@ -247,7 +247,7 @@ test('domains: operations', () => {
   assert.equal(domains.commitMessage([{ type: 'add', domain: { id: 'x', name: 'X' } }]), 'domains: new “x”');
 });
 
-test('today: focus, then by domain; a scope in full (later, no date, every goal), its parent agenda only', () => {
+test('today: focus, then by domain; a scope in full (later, no date, every goal), without its parent', () => {
   const now = new Date('2026-10-23T10:00:00Z');
   const tasksDoc = tasks.applyOps(tasks.emptyDoc('UTC'), [
     { type: 'add', task: task('own', { domain: 'studies/course-a', due: '2026-10-24' }) },
@@ -276,8 +276,8 @@ test('today: focus, then by domain; a scope in full (later, no date, every goal)
   assert.equal(view.week, '2026-W43');
   assert.deepEqual(view.focus.map((t) => t.id), ['focusHere']);
   assert.equal(view.focusElsewhere, 1);
-  assert.deepEqual(view.groups.map((g) => [g.domain, g.agenda]), [['studies/course-a', false], ['studies', true]]);
-  const [own, parent] = view.groups;
+  assert.deepEqual(view.groups.map((g) => [g.domain, g.agenda]), [['studies/course-a', false]]); // not its parent
+  const [own] = view.groups;
   // The next 7 days, not just this week: Monday's task shows on Friday; one in two weeks under Later.
   assert.deepEqual(own.tasks.map((t) => t.id), ['late', 'own', 'nextWeek']);
   assert.deepEqual(own.later.map((t) => t.id), ['inTwoWeeks']);
@@ -286,9 +286,6 @@ test('today: focus, then by domain; a scope in full (later, no date, every goal)
   assert.deepEqual(own.ongoing, []);
   assert.deepEqual(own.goals.map((g) => g.id), ['g4']); // every active goal, not only the week's
   assert.equal(own.label, 'Studies › Course A');
-  assert.deepEqual(parent.tasks.map((t) => t.id), ['parent']);
-  assert.deepEqual(parent.goals.map((g) => g.id), ['g1']); // category "Studies" = the domain's name
-  assert.deepEqual([parent.ongoing, parent.undated, parent.later], [[], [], []]); // undated items of the parent stay out
   // Without a scope: everything, in registry order; unregistered categories at the end.
   const all = buildToday({ goals: goalsDoc, tasks: tasksDoc, domains: REGISTRY, now, tz: 'UTC' });
   assert.deepEqual(all.groups.map((g) => g.domain), ['studies', 'studies/course-a', 'studies/course-b', 'sport']);
@@ -299,6 +296,7 @@ test('today: focus, then by domain; a scope in full (later, no date, every goal)
   const studies = buildToday({ goals: goalsDoc, tasks: tasksDoc, domains: REGISTRY, now, tz: 'UTC', scope: 'studies' });
   assert.deepEqual(studies.groups.map((g) => [g.domain, g.agenda]), [['studies', false], ['studies/course-b', false], ['studies/course-a', true]]);
   assert.deepEqual(studies.groups[0].undated.map((t) => t.id), ['parentUndated']);
+  assert.deepEqual(studies.groups[0].goals.map((g) => g.id), ['g1']); // category "Studies" = the domain's name
   assert.deepEqual(studies.groups[2].later, []);
   // From the root folder: every other domain is agenda (dated only).
   const root = buildToday({ goals: goalsDoc, tasks: tasksDoc, domains: REGISTRY, now, tz: 'UTC', scope: 'sport', root: true });
@@ -318,7 +316,7 @@ test('domains: chat scope and root folder', () => {
   assert.equal(doc.root, '~/hub');
   const sc = domains.chatScope(doc, 'b');
   assert.deepEqual([[...sc.own].sort(), [...sc.agenda].sort(), sc.others], [['b', 'b/x', 'b/x/deep'], ['b/y', 'b/y/z'], false]);
-  assert.deepEqual([...domains.chatScope(doc, 'b/y/z').agenda].sort(), ['b', 'b/y']);
+  assert.deepEqual([...domains.chatScope(doc, 'b/y/z').agenda], []); // no parents
   assert.equal(domains.isRoot(doc, '/home/me/hub', '/home/me'), true);
   assert.equal(domains.isRoot(doc, '/home/me/hub/scripts', '/home/me'), true);
   assert.equal(domains.isRoot(doc, '/b', '/home/me'), false);
