@@ -5,6 +5,7 @@ import * as tasksLib from '../../lib/tasks.js';
 import * as domainsLib from '../../lib/domains.js';
 import * as habitsLib from '../../lib/habits.js';
 import * as booksLib from '../../lib/books.js';
+import * as eventsLib from '../../lib/events.js';
 import * as journalLib from '../../lib/journal.js';
 import { isSealed, open, seal } from '../../lib/crypt.js';
 import { createStore } from './store.js';
@@ -61,7 +62,9 @@ export const habitsStore = createStore({ mod: habitsLib, file: 'habits.json', ls
 
 export const booksStore = createStore({ mod: booksLib, file: 'books.json', ls: 'compass.books', empty: () => booksLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
 
-export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksStore];
+export const eventsStore = createStore({ mod: eventsLib, file: 'events.json', ls: 'compass.events', empty: () => eventsLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
+
+export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksStore, eventsStore];
 
 /** The encryption password of this device (one for every sealed file), or null. */
 export const passphrase = () => /** @type {string|null} */ (lsGet(LS.passphrase));
@@ -140,6 +143,12 @@ export function dispatchHabits(...ops) {
 export function dispatchBooks(...ops) {
   if (!canEdit() || !ops.length) return;
   booksStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/events.js').Op} ops */
+export function dispatchEvents(...ops) {
+  if (!canEdit() || !ops.length) return;
+  eventsStore.dispatch(ops);
 }
 
 /** @param {...import('../../lib/journal.js').Op} ops */

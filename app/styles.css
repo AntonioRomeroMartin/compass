@@ -388,3 +388,8 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
 .journal-card { display: grid; gap: 2px; width: 100%; padding: 10px 12px; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .journal-card-date { font-weight: 600; font-size: .92rem; }
 .journal-card-text { color: var(--muted); font-size: .88rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+
+/* Events: a clock mark instead of the checkbox, and the day and times in one row of fields. */
+.event-mark { width: 1.2em; text-align: center; color: var(--muted, inherit); }
+.event-when { display: flex; flex-wrap: wrap; gap: 8px; }
+.event-when label { display: flex; flex-direction: column; gap: 2px; font-size: 0.85em; flex: 1 1 8em; }

@@ -259,6 +259,32 @@
     </div>
   </dialog>
 
+  <dialog id="event-dialog" class="sheet">
+    <form id="event-form" novalidate>
+      <div class="sheet-head"><h2 id="event-form-title">New event</h2></div>
+      <input name="title" required maxlength="200" autocomplete="off" placeholder="What (exam, deadline, trip…)" aria-label="Title" class="big">
+      <fieldset class="pick">
+        <legend>Area</legend>
+        <div id="event-areas" class="chip-pick" role="radiogroup" aria-label="Area"></div>
+      </fieldset>
+      <div class="event-when">
+        <label>Day <input name="date" type="date" required></label>
+        <label>From <input name="from" type="time"></label>
+        <label>To <input name="to" type="time"></label>
+        <label>Until <input name="until" type="date"></label>
+      </div>
+      <p class="hint">No time: all day. “Until”: its last day (or the day it ends).</p>
+      <input name="location" maxlength="200" autocomplete="off" placeholder="Place" aria-label="Place">
+      <textarea name="notes" rows="2" maxlength="2000" placeholder="Notes (shown in the calendar too)" aria-label="Notes"></textarea>
+      <p id="event-msg" class="msg" role="status" aria-live="polite"></p>
+      <div class="actions">
+        <div id="event-form-extra" class="extra"></div>
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="event-submit">Add</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="book-form-dialog" class="sheet">
     <form id="book-form" novalidate>
       <div class="sheet-head">
