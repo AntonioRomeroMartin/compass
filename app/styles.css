@@ -385,6 +385,11 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
 .journal-card-date { font-weight: 600; font-size: .92rem; }
 .journal-card-text { color: var(--muted); font-size: .88rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
 
+/* Events: a clock mark instead of the checkbox, and the day and times in one row of fields. */
+.event-mark { width: 1.2em; text-align: center; color: var(--muted, inherit); }
+.event-when { display: flex; flex-wrap: wrap; gap: 8px; }
+.event-when label { display: flex; flex-direction: column; gap: 2px; font-size: 0.85em; flex: 1 1 8em; }
+
 /* trades: figures, the curve, cut tables, a trade's facts */
 .figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 10px 0; }
 .figure { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; display: grid; gap: 1px; min-width: 0; }

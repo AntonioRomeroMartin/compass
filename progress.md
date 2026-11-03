@@ -19,6 +19,11 @@
   (`move` op; CLI `domain move`) and deletes an empty one (`domains.usage`, shared with CLI `domain delete`).
 - Offline: everything can be edited on the copy saved on the device; changes wait there and are uploaded when back
   online (the header shows only a crossed-out cloud while offline).
+- Events (`events.json`): exams, deadlines, trips (all day or with times, a last day, place, notes); tasks can point
+  to the event they prepare (`task.event`) and move with it. A domain names the calendar its events are copied to
+  (`--calendar`, `--calendar-color`; inherited). The sync is a plan (`compass calendar sync [--remote]`: push, pull of
+  changes made in the calendar, conflicts) carried out by whoever has a calendar connector, then `calendar done`.
+  App: events in Today, area pages (Events block) and Home cards, and a sheet to add or edit them.
 - Trades (`trades.json`, sealed like the journal; `lib/trades.js`): what the exchange knows (market, symbol, side,
   size, prices and times, leverage, fees, funding, net PnL) plus what the trader adds (initial stop, setup, timeframe,
   target, emotion 1-5, discipline errors from lists that grow, notes). Risk, R and planned against achieved R:R; the
@@ -29,6 +34,6 @@
   card. CLI `compass trades|trade` (`cli/trades.mjs`; `trade add` stands in for the import). Commit messages only count.
 - Local preview with sample data: `node tools/demo.mjs DIR`, then `python3 tools/serve.py 8767 --demo DIR` and open
   `/?demo` (a stand-in for GitHub's API on the same server; never touches a real data repo).
-- Tests: `node --test tests/*.test.mjs` (77), also run by GitHub on every PR.
+- Tests: `node --test tests/*.test.mjs` (84), also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys) and finance (budget, net worth, savings). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.

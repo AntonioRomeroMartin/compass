@@ -18,6 +18,7 @@ import { dirname, join, resolve } from 'node:path';
  * @property {string} domains  path of domains.json inside the repo
  * @property {string} habits   path of habits.json inside the repo
  * @property {string} books    path of books.json inside the repo
+ * @property {string} events   path of events.json inside the repo
  * @property {string} journal  path of journal.json (sealed) inside the repo
  * @property {string} trades   path of trades.json (sealed) inside the repo
  */
@@ -40,6 +41,7 @@ export function loadConfig() {
     domains: raw.domains ?? 'domains.json',
     habits: raw.habits ?? 'habits.json',
     books: raw.books ?? 'books.json',
+    events: raw.events ?? 'events.json',
     journal: raw.journal ?? 'journal.json',
     trades: raw.trades ?? 'trades.json',
   };

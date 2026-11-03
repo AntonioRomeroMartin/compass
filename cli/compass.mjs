@@ -13,6 +13,8 @@ import * as domains from '../lib/domains.js';
 import * as habits from '../lib/habits.js';
 import * as books from '../lib/books.js';
 import * as journal from '../lib/journal.js';
+import * as events from '../lib/events.js';
+import * as calendar from '../lib/calendar.js';
 import * as cryptSync from './crypt.mjs';
 import { tradesCmd } from './trades.mjs';
 import { webcrypto } from 'node:crypto';
@@ -31,6 +33,8 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
 /** @typedef {import('../lib/books.js').Book} Book */
 /** @typedef {import('../lib/books.js').BooksDoc} BooksDoc */
 /** @typedef {import('../lib/journal.js').JournalDoc} JournalDoc */
+/** @typedef {import('../lib/events.js').Event} Event */
+/** @typedef {import('../lib/events.js').EventsDoc} EventsDoc */
 /** @typedef {import('./repo.mjs').Config} Config */
 
 // lib/ uses the Web Crypto global, which Node only exposes from v19 on: give older Node (e.g. a
@@ -50,19 +54,21 @@ if (!globalThis.crypto) globalThis.crypto = /** @type {Crypto} */ (/** @type {un
  * @property {DomainsDoc} domains
  * @property {HabitsDoc} habits
  * @property {BooksDoc} books
+ * @property {EventsDoc} events
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks, habits, books, journal, trades and domains from the command line
+const HELP = `compass — goals, tasks, events, habits, books, journal, trades and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
-                                        focus, then by domain: tasks late/today/next 7 days, goals
+                                        focus, then by domain: events and tasks late/today/next 7 days, goals
                                         of the day and week, deadlines within 7 days, ongoing work
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
   compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE]
-                   [--ongoing PATH] [--notes T] [--location T] [--focus]
+                   [--ongoing PATH] [--notes T] [--location T] [--event E] [--focus]
+                                        --event: the event it prepares (moves with it)
   compass task add --stdin [options]    one task per line ("title" --due fri …), all in one commit;
                                         options given here apply to every line
   compass task done|undo|drop|focus|unfocus|show <task>
@@ -70,8 +76,25 @@ Usage:
   compass task drop <task> --stop       a repeating task: no next occurrence
   compass task move <task> [DATE]       default: tomorrow
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
-                   [--ongoing PATH] [--notes T] [--location T]   (none clears a field)
+                   [--ongoing PATH] [--notes T] [--location T] [--event E]   (none clears a field)
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
+  compass events [--domain D | --cwd PATH] [--past]
+                                        from today on (--past: the ones already over too)
+  compass event add "title" (--domain D | --cwd PATH) --date DATE [--time HH:MM[-HH:MM]] [--until DATE]
+                   [--location T] [--notes T] [--cal-id ID]
+                                        no --time: all day (--until: last day); --cal-id: it is already in
+                                        its domain's calendar with that id, exactly as given here
+  compass event edit <event> [--title T] [--domain D] [--date DATE] [--time HH:MM[-HH:MM]|none]
+                   [--until DATE|none] [--location T] [--notes T]
+                                        a new date moves its open tasks (--event) by the same days
+  compass event show <event> | delete <event> --yes
+  compass calendar [status]             what the calendar copy is missing (domains with --calendar)
+  compass calendar window               JSON: the calendars and days a sync has to read
+  compass calendar sync [--remote FILE|-]
+                                        JSON plan: pulls the calendar's changes (FILE: {"<calendar id>":
+                                        [its events as the calendar returns them]}), lists what to push
+                                        and the conflicts (changed on both sides, or deleted there)
+  compass calendar done [FILE|-]        after pushing: [{"event": E, "calId": ID|null}, {"deleted": ID}]
   compass habits [--domain D | --cwd PATH] [--archived]
   compass habit add "title" (--domain D | --cwd PATH) --freq F [--notes T]
   compass habit done|undo <habit> [DATE…]  default today; also yesterday, -N, YYYY-MM-DD (several: one commit)
@@ -110,6 +133,7 @@ Usage:
   compass domains
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
+                   [--calendar ID|none] [--calendar-color N|none]   (calendar of its events; inherited)
   compass domain move <id> --before <id>|--last   order among its siblings (as the app lists them)
   compass domain delete <id> --yes      only an empty one: no sub-domains, tasks, goals, habits or books
   compass goals [--past|--archived|--all] [--category C]
@@ -260,6 +284,7 @@ function taskLine(t, ctx, opts = {}) {
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
   if (t.subtasks.length) bits.push(`sub ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
+  if (t.event) bits.push(`for ${ctx.events.events.find((e) => e.id === t.event)?.title ?? t.event}`);
   if (t.location) bits.push(`@ ${t.location}`);
   if (t.notes) bits.push('notes');
   if (t.status !== 'open' && t.doneAt) bits.push(`${t.status} ${periodKey('day', new Date(t.doneAt), ctx.tz)}`);
@@ -389,6 +414,7 @@ async function main() {
     goals: goalsDoc, tasks: tasksDoc, domains: domains.normalize(readJsonIfExists(cfg, cfg.domains) ?? domains.emptyDoc()),
     habits: habits.normalize(readJsonIfExists(cfg, cfg.habits) ?? habits.emptyDoc()),
     books: books.normalize(readJsonIfExists(cfg, cfg.books) ?? books.emptyDoc()),
+    events: events.normalize(readJsonIfExists(cfg, cfg.events) ?? events.emptyDoc()),
   };
 
   switch (cmd) {
@@ -404,6 +430,9 @@ async function main() {
     case 'books': return listBooks(ctx, flags);
     case 'book': return book(ctx, sub, rest, flags);
     case 'journal': return journalCmd(ctx, sub, rest, flags);
+    case 'events': return listEvents(ctx, flags);
+    case 'event': return event(ctx, sub, rest, flags);
+    case 'calendar': return calendarCmd(ctx, sub, rest, flags);
     case 'trades':
     case 'trade': return tradesCmd(ctx, KIT, cmd, sub, rest, flags);
     default: fail(`unknown command “${cmd}” (compass help)`);
@@ -413,7 +442,7 @@ async function main() {
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
 function today(ctx, flags) {
   const scope = scopeFrom(ctx, flags);
-  const view = buildToday({ goals: ctx.goals, tasks: ctx.tasks, domains: ctx.domains, now: ctx.now, tz: ctx.tz, scope: scope.id });
+  const view = buildToday({ goals: ctx.goals, tasks: ctx.tasks, domains: ctx.domains, events: ctx.events, now: ctx.now, tz: ctx.tz, scope: scope.id });
   const date = new Intl.DateTimeFormat('en-GB', { timeZone: ctx.tz, weekday: 'short', day: 'numeric', month: 'short' }).format(ctx.now);
   console.log(`Today · ${date} · ${view.date} · ${view.week} (${ctx.tz})`);
   if (scope.id) {
@@ -427,9 +456,12 @@ function today(ctx, flags) {
     if (view.focusElsewhere) console.log(`  (+${view.focusElsewhere} in other domains)`);
   }
   if (!view.groups.length) console.log('Nothing due in the next 7 days.');
+  const cal = calendarPending(ctx);
+  if (cal) console.log(`Calendar: ${cal} (compass calendar)`);
   for (const g of view.groups) {
     const id = g.domain && g.label !== g.domain ? ` [${g.domain}]` : '';
     console.log(`${g.label}${id}${g.inherited ? ' · parent, dated only' : ''}`);
+    for (const e of g.events) console.log(`  ${eventLine(e, ctx, { domain: false })}`);
     for (const t of g.tasks) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
     for (const goal of g.goals) console.log(`  ${goalLine(goal, ctx.now, ctx.gtz)}`);
     for (const t of g.ongoing) console.log(`  ↳ ongoing [${t.id}] ${t.title} → ${t.ongoing}`);
@@ -538,6 +570,7 @@ function task(ctx, sub, rest, flags) {
     const t = tasks.newTask({
       title, domain: /** @type {string} */ (scope.id), due: repeat && !due ? tasks.firstDue(repeat, ctx.today) : due,
       repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)), location: orNull(str(opts.location)),
+      ...(str(opts.event) ? { event: findEvent(ctx.events, str(opts.event)).id } : {}),
     }, ctx.now);
     return { t, focus: !!opts.focus };
   };
@@ -634,6 +667,7 @@ function task(ctx, sub, rest, flags) {
           if (fields.repeat && !(fields.due ?? t.due)) fields.due = tasks.firstDue(fields.repeat, ctx.today);
         }
         for (const k of /** @type {const} */ (['notes', 'ongoing', 'location'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
+        if (str(flags.event) !== undefined) fields.event = orNull(str(flags.event)) === null ? null : findEvent(ctx.events, str(flags.event)).id;
         if (!Object.keys(fields).length) fail('nothing to edit');
         build = () => ({ tasks: [{ type: 'edit', id: tid, fields }] });
         break;
@@ -712,12 +746,13 @@ function listDomains(ctx) {
   const print = (d, depth) => {
     if (seen.has(d.id)) return;
     seen.add(d.id);
-    console.log(`${'  '.repeat(depth)}${d.id} — ${[d.name, ...(d.paths ?? []), ...(d.color ? [d.color] : [])].join(' · ')}`);
+    const cal = d.calendar ? [`calendar ${d.calendar.slice(0, 12)}…${d.calendarColor ? ` color ${d.calendarColor}` : ''}`] : d.calendarColor ? [`calendar color ${d.calendarColor}`] : [];
+    console.log(`${'  '.repeat(depth)}${d.id} — ${[d.name, ...(d.paths ?? []), ...(d.color ? [d.color] : []), ...cal].join(' · ')}`);
     for (const c of domains.children(doc, d.id)) print(c, depth + 1);
   };
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
   for (const d of doc.domains) print(d, 0); // left out by a cycle
-  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.books.books.map((b) => b.domain)])]
+  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.books.books.map((b) => b.domain), ...ctx.events.events.map((e) => e.domain)])]
     .filter((c) => c && !domains.domainOfCategory(doc, c));
   if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks, habits or books): ${loose.join(', ')}`);
   for (const p of domains.validate(doc)) console.error(`warning: ${p}`);
@@ -748,8 +783,13 @@ function domain(ctx, sub, rest, flags, lists) {
   } else if (sub === 'edit') {
     if (!domains.find(ctx.domains, id)) fail(`unknown domain “${id}”`);
     ops = [];
-    const color = str(flags.color);
-    if (str(flags.name) || color) ops.push({ type: 'edit', id, fields: { ...(str(flags.name) ? { name: str(flags.name) } : {}), ...(color ? { color: orNull(color) } : {}) } });
+    /** @type {import('../lib/domains.js').Op & { type: 'edit' }} */
+    const edit = { type: 'edit', id, fields: {} };
+    if (str(flags.name)) edit.fields.name = str(flags.name);
+    for (const [flag, k] of /** @type {const} */ ([['color', 'color'], ['calendar', 'calendar'], ['calendar-color', 'calendarColor']])) {
+      if (str(flags[flag]) !== undefined) edit.fields[k] = orNull(str(flags[flag]));
+    }
+    if (Object.keys(edit.fields).length) ops.push(edit);
     for (const p of lists['add-path'] ?? []) ops.push({ type: 'addPath', id, path: abs(p) });
     for (const p of lists['remove-path'] ?? []) ops.push({ type: 'removePath', id, path: abs(p) });
     if (!ops.length) fail('nothing to edit');
@@ -772,6 +812,7 @@ function domain(ctx, sub, rest, flags, lists) {
       goals: ctx.goals.goals.map((g) => g.category),
       habits: ctx.habits.habits.map((x) => x.domain),
       books: ctx.books.books.map((b) => b.domain),
+      events: ctx.events.events.map((e) => e.domain),
     });
     if (used.length) fail(`“${id}” is still used by ${used.map(([what, n]) => `${n} ${what}`).join(', ')}; move them first`);
     if (!flags.yes) fail(`delete removes the domain “${id}” for good. Add --yes to delete it.`);
@@ -1282,6 +1323,258 @@ function goal(ctx, sub, rest, flags) {
   const fresh = normalize(readJson(cfg, cfg.goals));
   const g = sub === 'add' ? fresh.goals[fresh.goals.length - 1] : fresh.goals.find((x) => x.id === findGoal(doc, rest[0]).id);
   if (g) console.log(goalLine(g, now, tz));
+}
+
+// ---------------------------------------------------------------- events and their calendar copy
+
+/**
+ * One line per event: when, how far, domain, place, and whether its calendar copy is up to date (⇄) or not (⇢).
+ * @param {Event} e @param {Ctx} ctx @param {{ domain?: boolean }} [opts]
+ */
+function eventLine(e, ctx, opts = {}) {
+  const d = daysUntil(events.dayOf(e.start), ctx.today, 'UTC');
+  const bits = [`${events.whenText(e)} (${events.isPast(e, ctx.today) ? 'over' : d <= 0 ? 'now' : relDays(d)})`];
+  if (opts.domain !== false) bits.push(e.domain);
+  if (e.location) bits.push(`@ ${e.location}`);
+  if (e.notes) bits.push('notes');
+  const t = calendar.target(ctx.domains, e.domain);
+  if (t) bits.push(e.cal && events.sameFields(events.fieldsOf(e), e.cal.last) && e.cal.calendar === t.calendar ? '⇄' : '⇢ to sync');
+  return `◷ [${e.id}] ${e.title} — ${bits.join(' · ')}`;
+}
+
+/**
+ * @param {EventsDoc} doc @param {string | undefined} ref
+ * @returns {Event}
+ */
+function findEvent(doc, ref) {
+  if (!ref) fail('which event? (id or part of the title)');
+  const byId = doc.events.find((e) => e.id === ref);
+  if (byId) return byId;
+  const q = ref.toLowerCase();
+  const pool = doc.events.filter((e) => e.title.toLowerCase().includes(q));
+  if (pool.length === 1) return pool[0];
+  if (!pool.length) fail(`no event matches “${ref}”`);
+  return fail(`“${ref}” matches several events:\n${pool.map((e) => `  [${e.id}] ${e.title} — ${events.whenText(e)}`).join('\n')}`);
+}
+
+/** @param {Ctx} ctx @param {Record<string, string | true>} flags */
+function listEvents(ctx, flags) {
+  const scope = scopeFrom(ctx, flags);
+  if (scope.note && !scope.id) console.error(`note: ${scope.note}; listing every domain`);
+  const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
+  const list = (flags.past ? [...ctx.events.events].sort(events.byStart) : events.upcoming(ctx.events, ctx.today))
+    .filter((e) => !own || own.has(domains.canonical(ctx.domains, e.domain)));
+  if (!list.length) console.log('No events.');
+  for (const e of list) console.log(eventLine(e, ctx));
+}
+
+/**
+ * A change to events.json and, in the same commit, to the tasks that move with an event.
+ * @typedef {{ events: events.Op[], tasks?: import('../lib/tasks.js').Op[] }} EventPlan
+ */
+
+/**
+ * Writes a plan built on the freshest versions of events.json and tasks.json.
+ * @param {Ctx} ctx @param {(e: EventsDoc, t: TasksDoc) => EventPlan} build
+ */
+function writeEvents(ctx, build) {
+  const { cfg } = ctx;
+  return commitFiles(cfg, [cfg.events, cfg.tasks], (docs) => {
+    const eBefore = docs[cfg.events] ? events.normalize(docs[cfg.events]) : events.emptyDoc(ctx.tz);
+    const tBefore = docs[cfg.tasks] ? tasks.normalize(docs[cfg.tasks]) : tasks.emptyDoc(ctx.tz);
+    const plan = build(eBefore, tBefore);
+    /** @type {Record<string, string>} */
+    const files = {};
+    const messages = [];
+    if (plan.events.length) {
+      const after = events.applyOps(eBefore, plan.events);
+      if (events.serialize(after) !== events.serialize(eBefore)) {
+        files[cfg.events] = events.serialize(after);
+        messages.push(events.commitMessage(plan.events, eBefore, after));
+      }
+    }
+    if (plan.tasks?.length) {
+      const after = tasks.applyOps(tBefore, plan.tasks);
+      files[cfg.tasks] = tasks.serialize(after);
+      messages.push(tasks.commitMessage(plan.tasks, tBefore, after));
+    }
+    return messages.length ? { files, message: messages.join('\n\n') } : null;
+  }, { sync: ctx.sync });
+}
+
+/**
+ * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
+ * @param {Record<string, string | true>} flags
+ */
+function event(ctx, sub, rest, flags) {
+  /** @param {string} text */
+  const day = (text) => attempt(() => tasks.parseDue(text, ctx.today));
+  /** @type {string} */
+  let id;
+  /** @type {(e: EventsDoc, t: TasksDoc) => EventPlan} */
+  let build;
+  if (sub === 'add') {
+    const title = rest[0] ?? str(flags.title);
+    if (!title) fail('event add needs a title: compass event add "title" --domain D --date DATE');
+    const scope = scopeFrom(ctx, flags);
+    if (!scope.id) fail(scope.note ? `${scope.note}; use --domain` : 'an event needs a domain: --domain D (or --cwd PATH)');
+    if (!str(flags.date)) fail('when? --date DATE [--time HH:MM[-HH:MM]] [--until DATE]');
+    const when = attempt(() => events.parseWhen(day(/** @type {string} */ (str(flags.date))), orNull(str(flags.time)), str(flags.until) ? day(/** @type {string} */ (str(flags.until))) : null));
+    const e = events.newEvent({ title, domain: /** @type {string} */ (scope.id), ...when, location: orNull(str(flags.location)), notes: orNull(str(flags.notes)) }, ctx.now);
+    const calId = str(flags['cal-id']);
+    if (calId) {
+      const t = calendar.target(ctx.domains, e.domain);
+      if (!t) fail(`“${e.domain}” has no calendar (compass domain edit <id> --calendar ID)`);
+      e.cal = calendar.linkFor(e, calId, t.calendar);
+    }
+    id = e.id;
+    build = () => ({ events: [{ type: 'add', event: e }] });
+  } else {
+    const e = findEvent(ctx.events, rest[0]);
+    id = e.id;
+    switch (sub) {
+      case 'show': {
+        console.log(eventLine(e, ctx));
+        if (e.notes) console.log(e.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
+        const linked = ctx.tasks.tasks.filter((t) => t.event === e.id);
+        for (const t of linked) console.log(`  ${taskLine(t, ctx)}`);
+        if (e.cal) console.log(`  calendar copy: ${e.cal.id}`);
+        return;
+      }
+      case 'delete':
+        if (!flags.yes) fail(`delete removes “${e.title}” for good (and its calendar copy on the next sync). Add --yes to delete it.`);
+        build = (_, t) => ({
+          events: [{ type: 'delete', id }],
+          tasks: t.tasks.filter((x) => x.event === id).map((x) => ({ type: 'edit', id: x.id, fields: { event: null } })),
+        });
+        break;
+      case 'edit': {
+        /** @type {events.EventFields} */
+        const fields = {};
+        if (str(flags.title)) fields.title = str(flags.title);
+        if (str(flags.domain)) fields.domain = domainRef(ctx, /** @type {string} */ (str(flags.domain)));
+        for (const k of /** @type {const} */ (['location', 'notes'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
+        const date = str(flags.date) === undefined ? undefined : day(/** @type {string} */ (str(flags.date)));
+        const time = str(flags.time);
+        const until = str(flags.until);
+        if (date !== undefined && time === undefined && until === undefined) Object.assign(fields, events.moveTo(e, date));
+        else if (date !== undefined || time !== undefined || until !== undefined) {
+          const curTime = events.isAllDay(e.start) ? null : `${events.timeOf(e.start)}${e.end ? `-${events.timeOf(e.end)}` : ''}`;
+          const curUntil = e.end && events.dayOf(e.end) !== events.dayOf(e.start) ? events.dayOf(e.end) : null;
+          const u = until === undefined ? curUntil : orNull(until) === null ? null : day(until);
+          Object.assign(fields, attempt(() => events.parseWhen(date ?? events.dayOf(e.start), time === undefined ? curTime : orNull(time), u)));
+        }
+        if (!Object.keys(fields).length) fail('nothing to edit');
+        build = (ev, t) => {
+          const cur = ev.events.find((x) => x.id === id);
+          return { events: [{ type: 'edit', id, fields }], tasks: cur && fields.start ? events.tasksToMove(t, id, cur.start, fields.start) : [] };
+        };
+        break;
+      }
+      default:
+        return fail(`unknown event action “${sub}” (compass help)`);
+    }
+  }
+  const res = writeEvents(ctx, build);
+  report(res, ctx.sync);
+  const saved = events.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.events)).events.find((x) => x.id === id);
+  if (saved) console.log(eventLine(saved, { ...ctx, tasks: tasks.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.tasks) ?? tasks.emptyDoc()) }));
+}
+
+/** What the calendar copy is missing, in a few words ('' = nothing). @param {Ctx} ctx */
+function calendarPending(ctx) {
+  const { push } = calendar.plan(ctx.events, ctx.domains);
+  if (!push.length) return '';
+  /** @type {Record<string, number>} */
+  const n = {};
+  for (const p of push) n[p.action] = (n[p.action] ?? 0) + 1;
+  return `${push.length} to sync (${Object.entries(n).map(([a, k]) => `${k} ${a}`).join(', ')})`;
+}
+
+/** Reads JSON from a file or, with "-", from stdin. @param {string} from */
+function readInput(from) {
+  const text = from === '-' ? readFileSync(0, 'utf8') : readFileSync(resolve(from), 'utf8');
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fail(`${from === '-' ? 'stdin' : from} is not valid JSON`);
+  }
+}
+
+/**
+ * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
+ * @param {Record<string, string | true>} flags
+ */
+function calendarCmd(ctx, sub, rest, flags) {
+  switch (sub ?? 'status') {
+    case 'status': {
+      const pending = calendarPending(ctx);
+      console.log(pending ? `Calendar: ${pending}.` : 'Calendar: nothing to push.');
+      console.log(`Last read of the calendar: ${ctx.events.checkedAt ?? 'never'}.`);
+      for (const p of calendar.plan(ctx.events, ctx.domains).push) {
+        const e = p.event ? ctx.events.events.find((x) => x.id === p.event) : null;
+        console.log(`  ${p.action} ${e ? `[${e.id}] ${e.title}` : `calendar copy ${'calId' in p ? p.calId : ''}`}`);
+      }
+      return;
+    }
+    case 'window':
+      console.log(JSON.stringify(calendar.window(ctx.events, ctx.domains, ctx.today), null, 2));
+      return;
+    case 'sync': {
+      const from = str(flags.remote);
+      const remote = from ? readInput(from) : null;
+      if (remote !== null && (typeof remote !== 'object' || Array.isArray(remote))) fail('--remote must be {"<calendar id>": [events…]}');
+      const first = calendar.plan(ctx.events, ctx.domains, remote);
+      if (first.pull.length || remote) {
+        const res = writeEvents(ctx, (ev, t) => {
+          const p = calendar.plan(ev, ctx.domains, remote);
+          /** @type {events.Op[]} */
+          const ops = [];
+          /** @type {import('../lib/tasks.js').Op[]} */
+          const tOps = [];
+          for (const { event: eid, fields } of p.pull) {
+            const cur = /** @type {Event} */ (ev.events.find((x) => x.id === eid));
+            const { title, start, end, location } = fields;
+            ops.push({ type: 'edit', id: eid, fields: { title, start, end, location } });
+            ops.push({ type: 'link', id: eid, cal: { .../** @type {events.Link} */ (cur.cal), last: fields } });
+            tOps.push(...events.tasksToMove(t, eid, cur.start, start));
+          }
+          if (remote) ops.push({ type: 'checked', at: ctx.now.toISOString() });
+          return { events: ops, tasks: tOps };
+        });
+        if (res.message) console.error(res.message.split('\n\n').join(' · ') + (res.pushed ? '' : ' (not pushed yet)'));
+      }
+      const fresh = events.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.events) ?? events.emptyDoc());
+      const after = calendar.plan(fresh, ctx.domains, remote);
+      console.log(JSON.stringify({ pulled: first.pull.map((p) => ({ event: p.event, title: p.title, fields: p.fields })), push: after.push, conflicts: after.conflicts }, null, 2));
+      return;
+    }
+    case 'done': {
+      const list = readInput(rest[0] ?? (flags.stdin ? '-' : str(flags.file) ?? '-'));
+      if (!Array.isArray(list)) fail('done takes a list: [{"event": E, "calId": ID|null}, {"deleted": ID}]');
+      const res = writeEvents(ctx, (ev) => {
+        /** @type {events.Op[]} */
+        const ops = [];
+        for (const item of list) {
+          if (typeof item?.deleted === 'string') {
+            ops.push({ type: 'unremove', calId: item.deleted });
+            continue;
+          }
+          const e = ev.events.find((x) => x.id === item?.event);
+          if (!e) continue;
+          const t = calendar.target(ctx.domains, e.domain);
+          ops.push({ type: 'link', id: e.id, cal: item.calId && t ? calendar.linkFor(e, String(item.calId), t.calendar) : null });
+        }
+        return { events: ops };
+      });
+      report(res, ctx.sync);
+      const pending = calendarPending({ ...ctx, events: events.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.events) ?? events.emptyDoc()) });
+      console.log(pending ? `Calendar: ${pending}.` : 'Calendar: in sync.');
+      return;
+    }
+    default:
+      return fail(`unknown calendar action “${sub}” (compass help)`);
+  }
 }
 
 main().catch((e) => fail(e instanceof Error ? e.message : String(e)));

@@ -1,10 +1,11 @@
 // @ts-check
-// Today: what is due today and this week, by area; undated tasks folded at the end.
+// Today: the events and what is due today and this week, by area; undated tasks folded at the end.
 import * as domainsLib from '../../lib/domains.js';
-import { current, domainsStore, goalsStore, loaded, persist, state, tasksStore, todayKey, tz } from '../core/data.js';
+import { current, domainsStore, eventsStore, goalsStore, loaded, persist, state, tasksStore, todayKey, tz } from '../core/data.js';
 import { $, h } from '../core/ui.js';
 import { goalRow } from '../modules/goals/view.js';
 import { taskRow } from '../modules/tasks/view.js';
+import { eventRow } from '../modules/events/view.js';
 import { activeHabits, habitRow } from '../modules/habits/view.js';
 import { isDueOn } from '../../lib/habits.js';
 import { byArea } from './habits.js';
@@ -25,7 +26,7 @@ export function renderTodayView() {
   // so those tasks show in their area like any other.
   const tasksDoc = tasksStore.current();
   const unfocused = { ...tasksDoc, tasks: tasksDoc.tasks.map((x) => ({ ...x, focus: false })) };
-  const t = buildToday({ goals: current(), tasks: unfocused, domains: domainsStore.current(), now: new Date(), tz: tz() });
+  const t = buildToday({ goals: current(), tasks: unfocused, domains: domainsStore.current(), events: eventsStore.current(), now: new Date(), tz: tz() });
   // Today's habits go in their area's block, after its tasks; an area with only habits gets a block of its own.
   const doms = domainsStore.current();
   const habitsByArea = new Map(byArea(activeHabits().filter((x) => isDueOn(x, todayKey()))));
@@ -33,7 +34,7 @@ export function renderTodayView() {
   const blocks = t.groups.map((g) => ({
     domain: g.domain,
     label: g.label,
-    rows: [...g.tasks.map((x) => taskRow(x)), ...g.goals.map(goalRow), ...g.ongoing.map((x) => taskRow(x)), ...(habitsByArea.get(g.domain) ?? []).map((x) => habitRow(x))],
+    rows: [...g.events.map((x) => eventRow(x)), ...g.tasks.map((x) => taskRow(x)), ...g.goals.map(goalRow), ...g.ongoing.map((x) => taskRow(x)), ...(habitsByArea.get(g.domain) ?? []).map((x) => habitRow(x))],
   }));
   for (const [area, list] of habitsByArea) {
     if (!t.groups.some((g) => g.domain === area)) blocks.push({ domain: area, label: domainsLib.label(doms, area) || area, rows: list.map((x) => habitRow(x)) });
