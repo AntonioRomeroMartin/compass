@@ -20,7 +20,7 @@ Each user's data lives in their own private repo.
 - One module per kind of data, each with its own file in the data repo and the same shape: `normalize`, `applyOps`
   (operations re-applied on the latest version), `serialize`, `commitMessage`, plus `summary` for the Today view (goals, tasks).
 - JSON schema: see the types in `lib/goals.js` (`Goal`, `GoalsDoc`), `lib/tasks.js` (`Task`, `TasksDoc`) and
-  `lib/domains.js` (`Domain`, `DomainsDoc`). Goal categories and domains are one list (category = domain id or name).
+  `lib/domains.js` (`Domain`, `DomainsDoc`), `lib/events.js` (`Event`, `EventsDoc`; its calendar copy: `lib/calendar.js`). Goal categories and domains are one list (category = domain id or name).
 - Data commits use the prefix of the file they change (`goals:`, `tasks:`, `domains:`); code commits, `compass:`.
 - New logic goes in `lib/` and is used by both sides; never duplicated between app and CLI.
 - Before pushing: `node --test tests/*.test.mjs`. A new file the app loads goes in `SHELL` (`sw.js`; `tests/sw.test.mjs` fails otherwise); there is no version to bump.
