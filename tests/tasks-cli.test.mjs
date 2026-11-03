@@ -116,7 +116,7 @@ test('no more than 3 tasks with focus', () => {
   assert.deepEqual(read('a', 'tasks.json').tasks.filter((/** @type {any} */ t) => t.focus).map((/** @type {any} */ t) => t.title), ['One', 'Three', 'Four']);
 });
 
-test('today --cwd: the folder\'s domain in full, its parent agenda only; the root folder sees every agenda', () => {
+test('today --cwd: the folder\'s domain in full, its sub-domains with folders agenda only, not its parent; the root sees every agenda', () => {
   const { dir, run } = setupWithDomains();
   run('task', 'add', 'Problem set', '--domain', 'course-a', '--due', 'today');
   run('task', 'add', 'Thesis draft', '--domain', 'course-a', '--ongoing', 'notes/thesis.md');
@@ -127,11 +127,10 @@ test('today --cwd: the folder\'s domain in full, its parent agenda only; the roo
   run('task', 'add', 'Stretch', '--domain', 'sport', '--due', 'today', '--focus');
   run('task', 'add', 'Final exam', '--domain', 'course-a', '--due', '+30');
   const out = run('today', '--cwd', join(dir, 'work', 'studies', 'course-a', 'week-2'));
-  assert.match(out, /^Scope: Studies › Course A \[studies\/course-a\] in full \+ agenda of Studies \(from --cwd\)$/m);
+  assert.match(out, /^Scope: Studies › Course A \[studies\/course-a\] in full \(from --cwd\)$/m);
   assert.match(out, /^Focus\n {2}\(\+1 in other domains\)$/m);
   assert.match(out, /^Studies › Course A \[studies\/course-a\]\n {2}· \[t_\w+\] Problem set — due \S+ \(today\)\n {2}Later\n {2}· \[t_\w+\] Final exam — due \S+ \(in 30 d\)\n {2}No date\n {2}· \[t_\w+\] Thesis draft — ongoing notes\/thesis\.md\n {2}· \[t_\w+\] Someday reading$/m);
-  assert.match(out, /^Studies \[studies\] · agenda only\n {2}· \[t_\w+\] Enrolment/m);
-  for (const hidden of ['Parent notes', 'Lab report', 'Stretch']) assert.doesNotMatch(out, new RegExp(hidden));
+  for (const hidden of ['Enrolment', 'Parent notes', 'Lab report', 'Stretch']) assert.doesNotMatch(out, new RegExp(hidden));
   // The parent's folder: its sub-domains have their own folders (and chats), so they are agenda only.
   const parent = run('today', '--cwd', join(dir, 'work', 'studies'));
   assert.match(parent, /^Scope: Studies \[studies\] in full \+ agenda of Studies › Course A, Studies › Course B \(from --cwd\)$/m);
@@ -143,7 +142,7 @@ test('today --cwd: the folder\'s domain in full, its parent agenda only; the roo
   const root = run('today', '--cwd', join(dir, 'work', 'studies'));
   assert.match(root, /^Scope: Studies \[studies\] in full \+ agenda of every other domain \(from --cwd, the root folder\)$/m);
   assert.match(root, /Stretch|\+1 in other domains/);
-  assert.match(run('today', '--cwd', join(dir, 'work', 'studies', 'course-a')), /in full \+ agenda of Studies \(from --cwd\)$/m);
+  assert.match(run('today', '--cwd', join(dir, 'work', 'studies', 'course-a')), /Course A \[studies\/course-a\] in full \(from --cwd\)$/m);
   run('domains', 'root', 'none');
   // --domain gives the same; a folder outside every domain shows everything and says so.
   assert.equal(run('today', '--domain', 'course-a'), out.replace(' (from --cwd)', ''));

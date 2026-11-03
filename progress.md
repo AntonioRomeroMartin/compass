@@ -35,7 +35,7 @@
 - Local preview with sample data: `node tools/demo.mjs DIR`, then `python3 tools/serve.py 8767 --demo DIR` and open
   `/?demo` (a stand-in for GitHub's API on the same server; never touches a real data repo).
 - `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
-  active goal); its parents and its sub-domains with their own paths, agenda only; from the root folder
+  active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
 - Tests: `node --test tests/*.test.mjs` (85), also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys) and finance (budget, net worth, savings). Deferred: day close and Focus in the app (the CLI

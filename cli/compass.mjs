@@ -64,8 +64,8 @@ Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
                                         focus, then by domain: events and tasks late/today/next 7 days, goals.
                                         With a domain: in full (also tasks dated later and without a date, every
-                                        active goal); its parents and its sub-domains with paths, agenda only;
-                                        from the root folder, every other domain too
+                                        active goal); its sub-domains with paths, agenda only (not its
+                                        parents); from the root folder, every other domain too
                                         of the day and week, deadlines within 7 days, ongoing work
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
@@ -153,7 +153,7 @@ Usage:
   compass period [YYYY-MM-DD] [--tz Area/City] [--days YYYY-MM-DD]
 
 <task>, <goal>: an id (t_…, g_…) or part of the title. D: a domain id or name. --cwd: the domain whose
-"paths" contain that folder (a subdomain also sees the dated items of its parents).
+"paths" contain that folder.
 --path, --add-path and --remove-path can be repeated. S: want, reading, read, dropped. DATE: YYYY-MM-DD, today, tomorrow, +N, mon…sun, none. RULE: daily, every N days, weekly, mon,thu,
 weekdays, monthly, monthly:15, none. F (habits): daily, 3/week (any days), mon,thu.
 --no-sync skips git pull/push; --timeout S limits the pull (default 3 s for today, 20 s otherwise).
@@ -453,8 +453,8 @@ function today(ctx, flags) {
   console.log(`Today · ${date} · ${view.date} · ${view.week} (${ctx.tz})`);
   if (scope.id) {
     const sc = domains.chatScope(ctx.domains, scope.id, scope.root);
-    // Named: its parents and the sub-domains with paths right under its own part (not what is below those).
-    const tops = [...domains.ancestors(ctx.domains, scope.id), ...[...sc.agenda].filter((id) => sc.own.has(domains.find(ctx.domains, id)?.parent ?? ''))];
+    // Named: the sub-domains with paths right under its own part (not what is below those).
+    const tops = [...sc.agenda].filter((id) => sc.own.has(domains.find(ctx.domains, id)?.parent ?? ''));
     const agenda = scope.root ? 'every other domain' : tops.map((id) => domains.label(ctx.domains, id)).join(', ');
     const what = `${domains.label(ctx.domains, scope.id)} [${scope.id}] in full${agenda ? ` + agenda of ${agenda}` : ''}`;
     console.log(`Scope: ${what}${scope.note ? ` (${scope.note})` : ''}`);
