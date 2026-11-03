@@ -62,7 +62,10 @@ const HELP = `compass — goals, tasks, events, habits, books, journal, trades a
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
-                                        focus, then by domain: events and tasks late/today/next 7 days, goals
+                                        focus, then by domain: events and tasks late/today/next 7 days, goals.
+                                        With a domain: in full (also tasks dated later and without a date, every
+                                        active goal); its parents and its sub-domains with paths, agenda only;
+                                        from the root folder, every other domain too
                                         of the day and week, deadlines within 7 days, ongoing work
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
@@ -131,6 +134,7 @@ Usage:
                     [--errors "a, b"] [--notes T]   (none clears a field)
   compass trade show|delete <trade> [--yes]
   compass domains
+  compass domains root PATH|none        the root folder (its chat sees the agenda of every domain)
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
                    [--calendar ID|none] [--calendar-color N|none]   (calendar of its events; inherited)
@@ -346,17 +350,19 @@ function domainRef(ctx, ref) {
 }
 
 /**
- * The domain of --domain, or the one whose paths contain --cwd.
+ * The domain of --domain, or the one whose paths contain --cwd (`root`: --cwd is the root folder).
  * @param {Ctx} ctx @param {Record<string, string | true>} flags
- * @returns {{ id: string | null, note: string | null }}
+ * @returns {{ id: string | null, note: string | null, root: boolean }}
  */
 function scopeFrom(ctx, flags) {
   const ref = str(flags.domain);
-  if (ref) return { id: domainRef(ctx, ref), note: null };
+  if (ref) return { id: domainRef(ctx, ref), note: null, root: false };
   const cwd = str(flags.cwd);
-  if (!cwd) return { id: null, note: null };
+  if (!cwd) return { id: null, note: null, root: false };
   const d = domains.resolvePath(ctx.domains, resolve(cwd), homedir());
-  return d ? { id: d.id, note: 'from --cwd' } : { id: null, note: 'no domain has a path containing --cwd' };
+  if (!d) return { id: null, note: 'no domain has a path containing --cwd', root: false };
+  const root = domains.isRoot(ctx.domains, resolve(cwd), homedir());
+  return { id: d.id, note: root ? 'from --cwd, the root folder' : 'from --cwd', root };
 }
 
 /** @param {string} raw @param {string} what */
@@ -421,7 +427,7 @@ async function main() {
     case 'today': return today(ctx, flags);
     case 'tasks': return listTasks(ctx, flags);
     case 'task': return task(ctx, sub, rest, flags);
-    case 'domains': return listDomains(ctx);
+    case 'domains': return sub === 'root' ? domainsRoot(ctx, rest) : listDomains(ctx);
     case 'domain': return domain(ctx, sub, rest, flags, lists);
     case 'goals': return listGoals(ctx, flags);
     case 'goal': return goal(ctx, sub, rest, flags);
@@ -442,12 +448,15 @@ async function main() {
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
 function today(ctx, flags) {
   const scope = scopeFrom(ctx, flags);
-  const view = buildToday({ goals: ctx.goals, tasks: ctx.tasks, domains: ctx.domains, events: ctx.events, now: ctx.now, tz: ctx.tz, scope: scope.id });
+  const view = buildToday({ goals: ctx.goals, tasks: ctx.tasks, domains: ctx.domains, events: ctx.events, now: ctx.now, tz: ctx.tz, scope: scope.id, root: scope.root });
   const date = new Intl.DateTimeFormat('en-GB', { timeZone: ctx.tz, weekday: 'short', day: 'numeric', month: 'short' }).format(ctx.now);
   console.log(`Today · ${date} · ${view.date} · ${view.week} (${ctx.tz})`);
   if (scope.id) {
-    const parents = domains.ancestors(ctx.domains, scope.id).map((id) => domains.label(ctx.domains, id));
-    const what = `${domains.label(ctx.domains, scope.id)} [${scope.id}]${parents.length ? ` + dated items of ${parents.join(', ')}` : ''}`;
+    const sc = domains.chatScope(ctx.domains, scope.id, scope.root);
+    // Named: its parents and the sub-domains with paths right under its own part (not what is below those).
+    const tops = [...domains.ancestors(ctx.domains, scope.id), ...[...sc.agenda].filter((id) => sc.own.has(domains.find(ctx.domains, id)?.parent ?? ''))];
+    const agenda = scope.root ? 'every other domain' : tops.map((id) => domains.label(ctx.domains, id)).join(', ');
+    const what = `${domains.label(ctx.domains, scope.id)} [${scope.id}] in full${agenda ? ` + agenda of ${agenda}` : ''}`;
     console.log(`Scope: ${what}${scope.note ? ` (${scope.note})` : ''}`);
   } else if (scope.note) console.log(`Scope: everything (${scope.note})`);
   if (view.focus.length || view.focusElsewhere) {
@@ -460,11 +469,15 @@ function today(ctx, flags) {
   if (cal) console.log(`Calendar: ${cal} (compass calendar)`);
   for (const g of view.groups) {
     const id = g.domain && g.label !== g.domain ? ` [${g.domain}]` : '';
-    console.log(`${g.label}${id}${g.inherited ? ' · parent, dated only' : ''}`);
+    console.log(`${g.label}${id}${g.agenda ? ' · agenda only' : ''}`);
     for (const e of g.events) console.log(`  ${eventLine(e, ctx, { domain: false })}`);
     for (const t of g.tasks) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
     for (const goal of g.goals) console.log(`  ${goalLine(goal, ctx.now, ctx.gtz)}`);
     for (const t of g.ongoing) console.log(`  ↳ ongoing [${t.id}] ${t.title} → ${t.ongoing}`);
+    if (g.later.length) console.log('  Later');
+    for (const t of g.later) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
+    if (g.undated.length) console.log('  No date');
+    for (const t of g.undated) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
   }
 }
 
@@ -752,6 +765,7 @@ function listDomains(ctx) {
   };
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
   for (const d of doc.domains) print(d, 0); // left out by a cycle
+  if (doc.root) console.log(`root folder: ${doc.root} (its chat sees the agenda of every domain)`);
   const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.books.books.map((b) => b.domain), ...ctx.events.events.map((e) => e.domain)])]
     .filter((c) => c && !domains.domainOfCategory(doc, c));
   if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks, habits or books): ${loose.join(', ')}`);
@@ -820,6 +834,21 @@ function domain(ctx, sub, rest, flags, lists) {
   } else {
     return fail(`unknown domain action “${sub}” (compass help)`);
   }
+  const res = commitChange(ctx.cfg, ctx.cfg.domains, (raw) => {
+    const before = raw ? domains.normalize(raw) : domains.emptyDoc();
+    return { text: domains.serialize(domains.applyOps(before, ops)), message: domains.commitMessage(ops) };
+  }, { sync: ctx.sync });
+  report(res, ctx.sync);
+}
+
+/** compass domains root PATH|none: the root folder. @param {Ctx} ctx @param {string[]} rest */
+function domainsRoot(ctx, rest) {
+  const raw = rest[0];
+  if (!raw) return console.log(ctx.domains.root ? `root: ${ctx.domains.root}` : 'No root folder (compass domains root PATH).');
+  const path = ['none', ''].includes(raw.toLowerCase()) ? null : raw.startsWith('~') ? raw : resolve(raw);
+  if (path && !domains.resolvePath(ctx.domains, path, homedir())) fail(`no domain has a path containing ${path}: add it to a domain first`);
+  /** @type {import('../lib/domains.js').Op[]} */
+  const ops = [{ type: 'setRoot', path }];
   const res = commitChange(ctx.cfg, ctx.cfg.domains, (raw) => {
     const before = raw ? domains.normalize(raw) : domains.emptyDoc();
     return { text: domains.serialize(domains.applyOps(before, ops)), message: domains.commitMessage(ops) };
