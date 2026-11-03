@@ -1,11 +1,11 @@
 // @ts-check
 // Home: one card per area with what each of its modules has to say (figures and a few lines); a card opens its area.
-// After them, the Books card (every book, with or without an area), which opens the Books tab.
+// Above them, the modules' warnings (a risk limit hit). After them, the Books card (every book, with or without an area), which opens the Books tab.
 
 import * as domainsLib from '../../lib/domains.js';
 import { areaIds, domainsStore, goalsStore, loaded, persist, render, state } from '../core/data.js';
 import { $, h } from '../core/ui.js';
-import { modulesOf } from '../modules/index.js';
+import { MODULES, modulesOf } from '../modules/index.js';
 import { openArea } from './areas.js';
 import { booksHomeCard } from '../modules/books/view.js';
 
@@ -43,5 +43,6 @@ export function renderHome() {
       kids.length ? h('div', { class: 'chips' }, ...kids.map((k) => h('span', { class: 'chip muted' }, k.name))) : null);
   });
   const books = card('Books', [booksHomeCard()], () => { state.tab = 'books'; persist(); render(); window.scrollTo(0, 0); });
-  view.append(h('div', { class: 'home-grid' }, ...cards, books));
+  // Warnings of the modules (a risk limit hit) go first.
+  view.append(...MODULES.map((m) => m.banner?.() ?? null).filter((x) => x !== null), h('div', { class: 'home-grid' }, ...cards, books));
 }

@@ -20,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
  * @property {string} books    path of books.json inside the repo
  * @property {string} events   path of events.json inside the repo
  * @property {string} journal  path of journal.json (sealed) inside the repo
+ * @property {string} trades   path of trades.json (sealed) inside the repo
  */
 
 const CONFIG_PATH = process.env.COMPASS_CONFIG ?? join(homedir(), '.config', 'compass', 'config.json');
@@ -42,6 +43,7 @@ export function loadConfig() {
     books: raw.books ?? 'books.json',
     events: raw.events ?? 'events.json',
     journal: raw.journal ?? 'journal.json',
+    trades: raw.trades ?? 'trades.json',
   };
 }
 

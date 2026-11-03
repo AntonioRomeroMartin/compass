@@ -16,6 +16,7 @@ import * as journal from '../lib/journal.js';
 import * as events from '../lib/events.js';
 import * as calendar from '../lib/calendar.js';
 import * as cryptSync from './crypt.mjs';
+import { tradesCmd } from './trades.mjs';
 import { webcrypto } from 'node:crypto';
 import { buildToday } from '../lib/today.js';
 import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, readJsonIfExists } from './repo.mjs';
@@ -57,7 +58,7 @@ if (!globalThis.crypto) globalThis.crypto = /** @type {Crypto} */ (/** @type {un
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks, events, habits, books, journal and domains from the command line
+const HELP = `compass — goals, tasks, events, habits, books, journal, trades and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
@@ -117,6 +118,18 @@ Usage:
   compass journal write "text" [--date DATE]   replaces that day's text ("none" clears it)
   compass journal note "text" [--date DATE]    adds a note
   compass journal unnote <note> [--date DATE]
+  compass trades [--open] [--range R]   trades and the limits hit now; encrypted like the journal
+  compass trades panel [--range R]      win rate, expectancy, R, PnL, drawdown; by setup, market, side,
+                                        timeframe and discipline. R: month, quarter (3 months), year, all
+  compass trades limits [--day R] [--week R] [--streak N]   in R (none clears); no option: show them
+  compass trades area <domain>          the area whose page shows them
+  compass trade add --symbol S --qty N --entry P --at TIME [--side long|short] [--market spot|perp|stock]
+                    [--account A] [--leverage N] [--fees N] [--funding N] [--order-stop P] [--ext ID]
+                    [--exit P --exit-at TIME --pnl NET]   (the exchanges' import adds them; this is for tests)
+  compass trade close <trade> --exit P --pnl NET [--at TIME]
+  compass trade edit <trade> [--stop-loss P] [--setup S] [--timeframe T] [--target P] [--emotion 1-5]
+                    [--errors "a, b"] [--notes T]   (none clears a field)
+  compass trade show|delete <trade> [--yes]
   compass domains
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
@@ -144,7 +157,7 @@ Config: ~/.config/compass/config.json →
   {"repo": "<data repo checkout>", "goals": "goals.json", "tasks": "tasks.json", "domains": "domains.json"}`;
 
 /** Flags that never take a value. */
-const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes', 'stdin', 'find']);
+const BOOLEAN = new Set(['all', 'past', 'archived', 'undo', 'focus', 'stop', 'no-sync', 'help', 'yes', 'stdin', 'find', 'open']);
 
 /**
  * `flags` keeps the last value of each flag; `lists` keeps every value of a repeated one (`--path A --path B`).
@@ -420,6 +433,8 @@ async function main() {
     case 'events': return listEvents(ctx, flags);
     case 'event': return event(ctx, sub, rest, flags);
     case 'calendar': return calendarCmd(ctx, sub, rest, flags);
+    case 'trades':
+    case 'trade': return tradesCmd(ctx, KIT, cmd, sub, rest, flags);
     default: fail(`unknown command “${cmd}” (compass help)`);
   }
 }
@@ -1088,6 +1103,9 @@ async function book(ctx, sub, rest, flags) {
   const saved = books.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.books)).books.find((x) => x.id === id);
   if (saved) console.log(bookLine(saved));
 }
+
+/** What the trades commands (cli/trades.mjs) borrow from here. @type {import('./trades.mjs').Kit} */
+const KIT = { fail, attempt, report, domainRef, needPassphrase: () => needPassphrase() };
 
 /** The passphrase of this computer, or an error that says how to set it. */
 function needPassphrase() {

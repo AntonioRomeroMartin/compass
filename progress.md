@@ -4,10 +4,10 @@
 - Version 2.12 (phase 3 done: areas edited in the app, offline editing). The app is a dashboard: Home (one card per area), Today (overdue, today and
   the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and one block per
   module), Goals, Habits and Books tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Book). Code split into
-  `app/core/`, `app/modules/` (tasks, goals, habits, books) and `app/views/`.
+  `app/core/`, `app/modules/` (tasks, goals, habits, books, journal, trades) and `app/views/`.
 - Data: tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags. Goals do not repeat
   and keep one progress number; tasks do not link to goals. Habits (`habits.json`) have no streaks.
-- Area pages: tasks, goals and habits always; other modules (books) only in the areas that have items of theirs.
+- Area pages: tasks, goals and habits always; other modules (books, trades) only in the areas that have items of theirs.
 - Books (`books.json`): status (want/reading/read/dropped) that sets the start and finish dates, rating, notes, quotes,
   Open Library search and cover id; no page count; the area is optional (none = general reading). CLI
   `compass book…`; app: Books tab, a block on the page of areas with books, and a Books card on Home.
@@ -24,6 +24,16 @@
   (`--calendar`, `--calendar-color`; inherited). The sync is a plan (`compass calendar sync [--remote]`: push, pull of
   changes made in the calendar, conflicts) carried out by whoever has a calendar connector, then `calendar done`.
   App: events in Today, area pages (Events block) and Home cards, and a sheet to add or edit them.
-- Tests: `node --test tests/*.test.mjs` (78), also run by GitHub on every PR.
-- Next: phase 5 trading and finance (client-side encrypted data). Deferred: day close and Focus in the app (the CLI
+- Trades (`trades.json`, sealed like the journal; `lib/trades.js`): what the exchange knows (market, symbol, side,
+  size, prices and times, leverage, fees, funding, net PnL) plus what the trader adds (initial stop, setup, timeframe,
+  target, emotion 1-5, discipline errors from lists that grow, notes). Risk, R and planned against achieved R:R; the
+  panel (closed trades of a month / 3 months / year / all: figures, R curve, cuts by setup, market, side, timeframe and
+  discipline; PnL in USD); risk limits in R (day, week, losses in a row) with the "no more trading today" banner on Home
+  and in Trades, and the "Over a limit" error added by itself. A trade without a stop shows "no stop" and counts in PnL,
+  not in R. App: Trades block on its area's page (limits edited there), the trade's sheet, figures on the area's Home
+  card. CLI `compass trades|trade` (`cli/trades.mjs`; `trade add` stands in for the import). Commit messages only count.
+- Local preview with sample data: `node tools/demo.mjs DIR`, then `python3 tools/serve.py 8767 --demo DIR` and open
+  `/?demo` (a stand-in for GitHub's API on the same server; never touches a real data repo).
+- Tests: `node --test tests/*.test.mjs` (84), also run by GitHub on every PR.
+- Next: phase 5, the exchanges' import (read-only API keys) and finance (budget, net worth, savings). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.
