@@ -189,20 +189,29 @@ compass help                          # every command (goals, sub-tasks, focus, 
 
 ```text
 Today · Fri 23 Oct · 2026-10-23 · 2026-W43 (Area/City)
-Scope: Studies › Course A [studies/course-a] + dated items of Studies (from --cwd)
+Scope: Studies › Course A [studies/course-a] in full + agenda of Studies (from --cwd)
 Focus
   ⭐ [t_…] Lab report — due 2026-10-24 (tomorrow) · studies/course-a
 Studies › Course A [studies/course-a]
   · [t_…] Problem set 3 — due 2026-10-21 (2 d late)
-  ↳ ongoing [t_…] Thesis draft → notes/thesis.md
-Studies [studies] · parent, dated only
+  · [g_…] Pass the course — 0/1 · month · studies/course-a
+  Later
+  · [t_…] Final project — due 2026-12-10 (in 48 d)
+  No date
+  · [t_…] Thesis draft — ongoing notes/thesis.md
+Studies [studies] · agenda only
   · [t_…] Exam registration — due 2026-10-25 (in 2 d)
   · [g_…] Study sessions — 2/5 · week · studies
 ```
 
-It shows the focus tasks, then by domain: tasks that are late, due today or in the next 7 days (tasks without a date only
-appear through focus or `ongoing`), goals of the day and the week, and deadlines within 7 days. Its `git pull`
-gives up after `--timeout` seconds (3 by default) and the view uses the local copy, with a one-line warning.
+It shows the focus tasks, then by domain: tasks that are late, due today or in the next 7 days, goals of the day and
+the week, and deadlines within 7 days. With a scope (`--cwd` or `--domain`), its own part is shown in full: the domain
+and its sub-domains without paths of their own, with the tasks dated later ("Later"), those without a date ("No
+date") and every active goal. Its parents and its sub-domains with their own paths (they have their own folder) are
+agenda only. A **root folder** (`compass domains root PATH`, stored as `root` in `domains.json`) is the one whose
+session oversees everything: from it, every other domain is agenda too. Without a scope it shows everything, dated
+only. Its `git pull` gives up after `--timeout` seconds (3 by default) and the view uses the local copy, with a
+one-line warning.
 
 ## Development
 
