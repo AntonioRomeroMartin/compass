@@ -6,6 +6,7 @@ import * as domainsLib from '../../lib/domains.js';
 import * as habitsLib from '../../lib/habits.js';
 import * as booksLib from '../../lib/books.js';
 import * as journalLib from '../../lib/journal.js';
+import * as tradesLib from '../../lib/trades.js';
 import { isSealed, open, seal } from '../../lib/crypt.js';
 import { createStore } from './store.js';
 import { lsGet, lsSet } from './ui.js';
@@ -66,35 +67,49 @@ export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksS
 /** The encryption password of this device (one for every sealed file), or null. */
 export const passphrase = () => /** @type {string|null} */ (lsGet(LS.passphrase));
 
-/** Salt of the journal as last read: kept on write, so the key is not derived again. @type {string|null} */
-let journalSalt = null;
-
-// The journal is sealed with the encryption password; without it on this device it is neither read nor written.
-// It is not in STORES: its errors (a wrong password) show in the journal, not in the banner.
-export const journalStore = createStore({
-  mod: journalLib, file: 'journal.json', ls: 'compass.journal', empty: () => journalLib.emptyDoc(goalsStore.current().timeZone),
-  cfg, onChange: () => render(), ready: () => goalsStore.state.loaded, active: () => !!passphrase(),
-  codec: {
-    decode: async (text) => {
-      const raw = JSON.parse(text);
-      if (!isSealed(raw)) throw new Error('journal.json is not encrypted, so it is not opened.');
-      const opened = await open(raw, /** @type {string} */ (passphrase()));
-      journalSalt = opened.salt;
-      return opened.text;
+/**
+ * A file sealed with the encryption password (journal, trades): without the password on this device it is
+ * neither read nor written. Sealed stores are not in STORES: their errors (a wrong password) show in their own blocks,
+ * not in the banner.
+ * @template D, O
+ * @param {import('./store.js').Module<D, O>} mod @param {string} file @param {string} ls @param {() => D} empty
+ */
+function sealedStore(mod, file, ls, empty) {
+  /** Salt as last read: kept on write, so the key is not derived again. @type {string|null} */
+  let salt = null;
+  const store = createStore({
+    mod, file, ls, empty, cfg, onChange: () => render(), ready: () => goalsStore.state.loaded, active: () => !!passphrase(),
+    codec: {
+      decode: async (text) => {
+        const raw = JSON.parse(text);
+        if (!isSealed(raw)) throw new Error(`${file} is not encrypted, so it is not opened.`);
+        const opened = await open(raw, /** @type {string} */ (passphrase()));
+        salt = opened.salt;
+        return opened.text;
+      },
+      encode: (text) => seal(text, /** @type {string} */ (passphrase()), salt),
     },
-    encode: (text) => seal(text, /** @type {string} */ (passphrase()), journalSalt),
-  },
-});
+  });
+  return Object.assign(store, { forgetSalt: () => { salt = null; } });
+}
 
-/** Every store, the journal too (to save pending changes or retry). */
-export const ALL_STORES = [...STORES, journalStore];
+export const journalStore = sealedStore(journalLib, 'journal.json', 'compass.journal', () => journalLib.emptyDoc(goalsStore.current().timeZone));
 
-/** Sets (or, with null, forgets) this device's encryption password and reads the journal again with it. @param {string|null} pass */
+export const tradesStore = sealedStore(tradesLib, 'trades.json', 'compass.trades', () => tradesLib.emptyDoc(goalsStore.current().timeZone));
+
+const SEALED = [journalStore, tradesStore];
+
+/** Every store, the sealed ones too (to save pending changes or retry). */
+export const ALL_STORES = [...STORES, ...SEALED];
+
+/** Sets (or, with null, forgets) this device's encryption password and reads the sealed files again with it. @param {string|null} pass */
 export function setPassphrase(pass) {
   lsSet(LS.passphrase, pass);
-  journalSalt = null;
-  journalStore.reset();
-  journalStore.refresh();
+  for (const st of SEALED) {
+    st.forgetSalt();
+    st.reset();
+    st.refresh();
+  }
   render();
 }
 
@@ -146,6 +161,12 @@ export function dispatchBooks(...ops) {
 export function dispatchJournal(...ops) {
   if (!canEdit() || !ops.length) return;
   journalStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/trades.js').Op} ops */
+export function dispatchTrades(...ops) {
+  if (!canEdit() || !ops.length) return;
+  tradesStore.dispatch(ops);
 }
 
 /** Civil date of today in the data's time zone. */
