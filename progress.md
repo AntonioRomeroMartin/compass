@@ -19,6 +19,11 @@
   (`move` op; CLI `domain move`) and deletes an empty one (`domains.usage`, shared with CLI `domain delete`).
 - Offline: everything can be edited on the copy saved on the device; changes wait there and are uploaded when back
   online (the header shows only a crossed-out cloud while offline).
-- Tests: `node --test tests/*.test.mjs` (71), also run by GitHub on every PR.
+- Events (`events.json`): exams, deadlines, trips (all day or with times, a last day, place, notes); tasks can point
+  to the event they prepare (`task.event`) and move with it. A domain names the calendar its events are copied to
+  (`--calendar`, `--calendar-color`; inherited). The sync is a plan (`compass calendar sync [--remote]`: push, pull of
+  changes made in the calendar, conflicts) carried out by whoever has a calendar connector, then `calendar done`.
+  App: events in Today, area pages (Events block) and Home cards, and a sheet to add or edit them.
+- Tests: `node --test tests/*.test.mjs` (78), also run by GitHub on every PR.
 - Next: phase 5 trading and finance (client-side encrypted data). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.
