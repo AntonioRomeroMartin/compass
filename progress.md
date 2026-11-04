@@ -4,10 +4,10 @@
 - Version 2.12 (phase 3 done: areas edited in the app, offline editing). The app is a dashboard: Home (one card per area), Today (overdue, today and
   the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and one block per
   module), Goals, Habits and Books tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Book). Code split into
-  `app/core/`, `app/modules/` (tasks, goals, habits, books, journal, trades) and `app/views/`.
+  `app/core/`, `app/modules/` (tasks, goals, habits, books, journal, trades, finance) and `app/views/`.
 - Data: tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags. Goals do not repeat
   and keep one progress number; tasks do not link to goals. Habits (`habits.json`) have no streaks.
-- Area pages: tasks, goals and habits always; other modules (books, trades) only in the areas that have items of theirs.
+- Area pages: tasks, goals and habits always; other modules (books, trades, finance) only in the areas that have items of theirs.
 - Books (`books.json`): status (want/reading/read/dropped) that sets the start and finish dates, rating, notes, quotes,
   Open Library search and cover id; no page count; the area is optional (none = general reading). CLI
   `compass book…`; app: Books tab, a block on the page of areas with books, and a Books card on Home.
@@ -32,11 +32,24 @@
   and in Trades, and the "Over a limit" error added by itself. A trade without a stop shows "no stop" and counts in PnL,
   not in R. App: Trades block on its area's page (limits edited there), the trade's sheet, figures on the area's Home
   card. CLI `compass trades|trade` (`cli/trades.mjs`; `trade add` stands in for the import). Commit messages only count.
+- Finance (`finance.json`, sealed; `lib/finance.js`): categories with a monthly limit that holds from the month it is
+  set, rules (text a movement contains → category), accounts (bank, cash, DeFi with its public address, debt, other;
+  other currencies by their rate to EUR) and movements (+ in, − out; the bank's id or day + amount + text keeps imports
+  from repeating). Transfers between one's own accounts stay out of the budget. Budget of a month: spent against limit
+  per category, income, expenses against the average of up to 3 earlier months, saved, and the uncategorized list
+  (pick a category, optionally as a rule). Net worth by kind; trading accounts are left out until the exchanges'
+  import brings their balance. Last month's row of net worth is written the first time the app or CLI opens finance
+  in a new month (never over a row already there). Savings goals: a goal with `source: "savings"` whose progress is
+  the net worth (reach X) or what it grew since it was set (add X); the target stays in the sealed file. App: Finance
+  block on its area's page (month by month), figures and bar on the area's Home card, "Progress" in the goal's sheet.
+  CLI `compass money …` (`cli/finance.mjs`; `money add` stands in for the bank's import; no movements by hand in the
+  app). Commit messages only count.
 - Local preview with sample data: `node tools/demo.mjs DIR`, then `python3 tools/serve.py 8767 --demo DIR` and open
   `/?demo` (a stand-in for GitHub's API on the same server; never touches a real data repo).
 - `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
-- Tests: `node --test tests/*.test.mjs` (85), also run by GitHub on every PR.
-- Next: phase 5, the exchanges' import (read-only API keys) and finance (budget, net worth, savings). Deferred: day close and Focus in the app (the CLI
+- Tests: `node --test tests/*.test.mjs` (91), also run by GitHub on every PR.
+- Next: phase 5, the exchanges' import (read-only API keys; it also brings trading balances to net worth) and the
+  bank's download (Enable Banking). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.

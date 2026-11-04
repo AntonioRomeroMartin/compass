@@ -8,6 +8,7 @@ import * as booksLib from '../../lib/books.js';
 import * as eventsLib from '../../lib/events.js';
 import * as journalLib from '../../lib/journal.js';
 import * as tradesLib from '../../lib/trades.js';
+import * as financeLib from '../../lib/finance.js';
 import { isSealed, open, seal } from '../../lib/crypt.js';
 import { createStore } from './store.js';
 import { lsGet, lsSet } from './ui.js';
@@ -71,7 +72,7 @@ export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksS
 export const passphrase = () => /** @type {string|null} */ (lsGet(LS.passphrase));
 
 /**
- * A file sealed with the encryption password (journal, trades): without the password on this device it is
+ * A file sealed with the encryption password (journal, trades, finance): without the password on this device it is
  * neither read nor written. Sealed stores are not in STORES: their errors (a wrong password) show in their own blocks,
  * not in the banner.
  * @template D, O
@@ -100,7 +101,9 @@ export const journalStore = sealedStore(journalLib, 'journal.json', 'compass.jou
 
 export const tradesStore = sealedStore(tradesLib, 'trades.json', 'compass.trades', () => tradesLib.emptyDoc(goalsStore.current().timeZone));
 
-const SEALED = [journalStore, tradesStore];
+export const financeStore = sealedStore(financeLib, 'finance.json', 'compass.finance', () => financeLib.emptyDoc(goalsStore.current().timeZone));
+
+const SEALED = [journalStore, tradesStore, financeStore];
 
 /** Every store, the sealed ones too (to save pending changes or retry). */
 export const ALL_STORES = [...STORES, ...SEALED];
@@ -116,7 +119,30 @@ export function setPassphrase(pass) {
   render();
 }
 
-export const current = () => goalsStore.current();
+/**
+ * A module that counts the progress of some goals (their `source`, lib/goals.js): it gives their value and target,
+ * which it keeps itself (savings: in the sealed finance file), and stores the target set in the goal's sheet.
+ * @typedef {Object} GoalSource
+ * @property {[string, string][]} kinds  ways of counting it, as [value, text] for the goal's sheet
+ * @property {() => boolean} available   it can be read on this device (e.g. the password is set)
+ * @property {(g: import('../../lib/goals.js').Goal) => { value: number, target: number }|null} progress
+ * @property {(g: import('../../lib/goals.js').Goal) => { kind: string, target: number }|null} get
+ * @property {(goal: string, kind: any, target: number) => void} save
+ * @property {(goal: string) => void} remove
+ */
+
+/** Registered by the modules that count goals (finance: "savings"). @type {Record<string, GoalSource>} */
+export const goalSources = {};
+
+/** The goals file, with the progress and target of the goals another module counts filled in. */
+export function current() {
+  const doc = goalsStore.current();
+  if (!doc.goals.some((g) => g.source)) return doc;
+  return { ...doc, goals: doc.goals.map((g) => {
+    const p = g.source ? goalSources[g.source]?.progress(g) : null;
+    return p ? { ...g, progress: p.value, target: p.target } : g;
+  }) };
+}
 
 /** Time zone of the periods: the goals file's; if it has none, the device's. */
 export const tz = () => {
@@ -176,6 +202,12 @@ export function dispatchJournal(...ops) {
 export function dispatchTrades(...ops) {
   if (!canEdit() || !ops.length) return;
   tradesStore.dispatch(ops);
+}
+
+/** @param {...import('../../lib/finance.js').Op} ops */
+export function dispatchFinance(...ops) {
+  if (!canEdit() || !ops.length) return;
+  financeStore.dispatch(ops);
 }
 
 /** Civil date of today in the data's time zone. */

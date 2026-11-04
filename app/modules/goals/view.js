@@ -1,7 +1,7 @@
 // @ts-check
 // Goals module (app side): the Goals page, goal cards and sheet, categories, and its parts of the area page and the Home card.
 import * as domainsLib from '../../../lib/domains.js';
-import { areaIds, canEdit, current, dispatchGoals, domainsStore, goalsStore, inAreas, state, tz } from '../../core/data.js';
+import { areaIds, canEdit, current, dispatchGoals, domainsStore, goalSources, goalsStore, inAreas, state, tz } from '../../core/data.js';
 import { $, editRow, fmt, h } from '../../core/ui.js';
 import { categoryUsage, isDone, isExpired, newId, subgoalsDone } from '../../../lib/goals.js';
 import { HORIZONS, daysUntil, deviceTimeZone, isValidTimeZone, periodKey } from '../../../lib/period.js';
@@ -77,7 +77,7 @@ export function goalRow(g) {
       'span',
       { class: 'task-meta' },
       h('span', { class: 'chip muted' }, `${fmt(value)}${target ? ` / ${fmt(target)}` : ''}${g.unit ? ` ${g.unit}` : ''}`),
-      h('button', {
+      g.source ? null : h('button', {
         class: 'round small', 'aria-label': `Add 1 to ${g.title}`, disabled: !canEdit(),
         onclick: () => dispatchGoals(target ? { type: 'inc', id: g.id, delta: 1 } : { type: 'set', id: g.id, value: done ? 0 : 1 }),
       }, target ? '+' : done ? '✓' : '○'),
@@ -168,7 +168,8 @@ export function card(g, now) {
   const zone = tz();
   const value = g.progress;
   const expired = isExpired(g, now, zone);
-  const editable = canEdit() && !g.archived && !expired;
+  // A goal counted by another module (savings: net worth) is not moved by hand.
+  const editable = canEdit() && !g.archived && !expired && !g.source;
   const target = g.target && g.target > 0 ? g.target : null;
   const done = isDone(g);
   const when = g.horizon === 'deadline' ? 'Deadline' : expired ? HORIZON_SHORT[g.horizon] : HORIZON_LABEL[g.horizon];
@@ -183,6 +184,7 @@ export function card(g, now) {
     expired ? h('span', { class: 'chip muted' }, g.horizon === 'deadline' ? g.deadline ?? '' : g.period ?? '') : null,
     expired ? h('span', { class: done ? 'chip' : 'chip danger' }, done ? '✓ Completed' : '✗ Missed') : null,
     g.horizon === 'deadline' && g.deadline && !expired ? deadlineChip(g.deadline, now) : null,
+    g.source === 'savings' ? h('span', { class: 'chip muted' }, 'from net worth') : null,
     g.repo ? h('span', { class: 'chip muted' }, g.repo) : null,
     g.location ? h('span', { class: 'chip muted' }, `📍 ${g.location}`) : null,
   );
@@ -197,6 +199,8 @@ export function card(g, now) {
     );
   } else if (expired) {
     progress = h('p', { class: 'result' }, target ? `${fmt(value)} / ${fmt(target)}${g.unit ? ` ${g.unit}` : ''}` : done ? 'Done' : 'Not done');
+  } else if (g.source && !target) {
+    progress = h('p', { class: 'hint' }, 'Counted from net worth: set the encryption password on this device to see it.');
   } else if (target) {
     const pct = Math.min(100, (value / target) * 100);
     const bar = h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': value });
@@ -311,7 +315,14 @@ export function openGoalForm(goal, area = '') {
   f.category.value = goal ? areaOf(goal.category) : area || state.filter || options[0]?.[0] || NEW_CATEGORY;
   f.newCategory.value = '';
   f.horizon.value = goal?.horizon ?? 'week';
-  f.target.value = goal?.target ?? '';
+  // Progress counted by another module (savings): its kinds, when it can be read here; its target is kept there.
+  const source = goalSources.savings;
+  const counted = goal?.source ? source?.get(goal) ?? null : null;
+  const canCount = !!source?.available() && (!goal || !goal.source || !!counted);
+  f.source.replaceChildren(h('option', { value: '' }, 'Counted by hand'), ...(canCount && source ? source.kinds.map(([v, t]) => h('option', { value: v }, t)) : []));
+  f.source.value = counted?.kind ?? '';
+  $('field-source').hidden = !canCount;
+  f.target.value = counted?.target ?? goal?.target ?? '';
   f.unit.value = goal?.unit ?? '';
   f.deadline.value = goal?.deadline ?? '';
   f.repo.value = goal?.repo ?? '';
@@ -356,12 +367,16 @@ export function openGoalForm(goal, area = '') {
     if (!category) return f.newCategory.focus();
     if (target !== null && (!Number.isFinite(target) || target <= 0)) return alert('The target must be a number greater than 0 (or leave it empty).');
     if (horizon === 'deadline' && !deadline) return alert('Set the deadline.');
+    const kind = $('field-source').hidden ? (goal?.source ? 'keep' : '') : String(f.source.value);
+    if (kind && kind !== 'keep' && target === null) return alert('Set the target: the amount in €.');
     const fields = {
       title,
       category,
       horizon,
-      target,
-      unit: target !== null ? String(f.unit.value).trim() || null : null,
+      // A counted goal keeps its target in its module (encrypted), not here.
+      target: kind ? null : target,
+      unit: kind ? '€' : target !== null ? String(f.unit.value).trim() || null : null,
+      source: kind ? 'savings' : null,
       deadline,
       period,
       repo: String(f.repo.value).trim() || null,
@@ -385,11 +400,14 @@ export function openGoalForm(goal, area = '') {
         }),
       ];
       dispatchGoals({ type: 'edit', id: goal.id, fields }, ...subOps);
+      if (kind && kind !== 'keep' && (kind !== counted?.kind || target !== counted?.target)) goalSources.savings?.save(goal.id, kind, /** @type {number} */ (target));
+      else if (!kind && goal.source) goalSources.savings?.remove(goal.id);
     } else {
       /** @type {Goal} */
       const g = { id: newId(), kind: 'goal', ...fields, progress: 0, createdAt: new Date().toISOString() };
       if (rows.length) g.subgoals = rows.map((r) => ({ id: newId('s_'), title: r.title, done: false }));
       dispatchGoals({ type: 'add', goal: g });
+      if (kind) goalSources.savings?.save(g.id, kind, /** @type {number} */ (target));
     }
     dialog.close();
   };
@@ -408,6 +426,8 @@ export function syncFormVisibility(form) {
   const f = /** @type {any} */ (form.elements);
   $('field-new-category').hidden = f.category.value !== NEW_CATEGORY;
   $('field-deadline').hidden = f.horizon.value !== 'deadline';
+  // A goal counted from net worth: the target is in €, so there is no unit to type.
+  $('field-unit').hidden = !$('field-source').hidden && !!f.source.value;
   const hz = /** @type {Horizon} */ (f.horizon.value);
   $('horizon-hint').textContent = hz === 'deadline' ? '' : `Ends with ${HORIZON_LABEL[hz].toLowerCase()} (${periodKey(hz, new Date(), tz())}), then moves to Past.`;
   f.deadline.required = f.horizon.value === 'deadline';

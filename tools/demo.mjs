@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-// Sample data for a local preview (made-up, the same every time): writes the data files to DIR, trades sealed with
+// Sample data for a local preview (made-up, the same every time): writes the data files to DIR, money sealed with
 // the password "demo". Then: python3 tools/serve.py 8767 --demo DIR, and open http://127.0.0.1:8767/?demo
 //
 // Usage: node tools/demo.mjs DIR
@@ -8,6 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as trades from '../lib/trades.js';
+import * as finance from '../lib/finance.js';
 import * as tasks from '../lib/tasks.js';
 import { sealSync } from '../cli/crypt.mjs';
 
@@ -33,6 +34,7 @@ const write = (name, doc) => writeFileSync(join(dir, name), typeof doc === 'stri
 
 mkdirSync(dir, { recursive: true });
 write('goals.json', { version: 1, timeZone: TZ, categories: [], goals: [
+  { id: 'g_fund', kind: 'goal', title: 'Rainy-day fund', category: 'money', horizon: 'deadline', target: null, unit: '€', deadline: `${now.getFullYear()}-12-31`, progress: 0, createdAt: day(60).toISOString(), source: 'savings' },
   { id: 'g_read', kind: 'goal', title: 'Read 3 papers', category: 'work', horizon: 'month', target: 3, unit: null, deadline: null, progress: 1, createdAt: day(3).toISOString() },
 ] });
 write('domains.json', { version: 1, domains: [
@@ -81,5 +83,41 @@ for (let i = 0; i < 46; i++) {
   }) });
 }
 write('trades.json', sealSync(trades.serialize(trades.applyOps(trades.emptyDoc(TZ), tops)), PASS));
+
+// ---- finance: categories with limits, rules, accounts and four months of movements
+const CATS = [['rent', 'Rent', 700], ['groceries', 'Groceries', 280], ['eating-out', 'Eating out', 90], ['gym', 'Gym', 35], ['books', 'Books', 25], ['misc', 'Misc', 100]];
+/** @type {finance.Op[]} */
+const fops = [
+  { type: 'setDomain', domain: 'money' },
+  ...CATS.map(([id, name, amount]) => /** @type {finance.Op} */ ({ type: 'addCategory', category: { id: String(id), name: String(name), limits: [{ from: '2020-01', amount: Number(amount) }] } })),
+  ...[['rent', 'rent'], ['grocer', 'groceries'], ['market', 'groceries'], ['pizza', 'eating-out'], ['cafe', 'eating-out'], ['gym', 'gym'], ['to exchange', finance.TRANSFER]]
+    .map(([match, category], i) => /** @type {finance.Op} */ ({ type: 'addRule', rule: { id: `r_${i}`, match, category } })),
+  { type: 'setAccount', account: { id: 'bank', name: 'Main bank', kind: 'bank', currency: 'EUR', balance: 6420, rate: 1, at: now.toISOString(), address: null } },
+  { type: 'setAccount', account: { id: 'savings', name: 'Savings', kind: 'bank', currency: 'EUR', balance: 3000, rate: 1, at: now.toISOString(), address: null } },
+  { type: 'setAccount', account: { id: 'cash', name: 'Cash', kind: 'cash', currency: 'EUR', balance: 80, rate: 1, at: now.toISOString(), address: null } },
+  { type: 'setAccount', account: { id: 'wallet', name: 'Wallet', kind: 'defi', currency: 'USD', balance: 540, rate: 0.92, at: now.toISOString(), address: '0x0000000000000000000000000000000000000000' } },
+  { type: 'setSaving', saving: { goal: 'g_fund', kind: 'networth', target: 15000, base: null } },
+];
+let n = 0;
+/** @param {string} d @param {number} amount @param {string} text */
+const mv = (d, amount, text) => fops.push({ type: 'addMovement', movement: { id: `m_${n}`, extId: `demo-${n++}`, account: 'bank', date: d, amount, text, category: null } });
+for (let m = 3; m >= 0; m--) {
+  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m, 1));
+  const last = m ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m + 1, 0)).getUTCDate() : now.getUTCDate();
+  const on = (/** @type {number} */ d) => new Date(first.getTime() + (Math.min(d, last) - 1) * 86400000).toISOString().slice(0, 10);
+  mv(on(1), 1450, 'Salary');
+  mv(on(1), -650, 'Rent');
+  if (last >= 3) mv(on(3), -200, 'Transfer to exchange');
+  for (let d = 2; d <= last; d += 3) mv(on(d), -Math.round((8 + rand() * 40) * 100) / 100, pick(['Grocer', 'Grocer', 'Market']));
+  for (let d = 5; d <= last; d += 9) mv(on(d), -Math.round((6 + rand() * 25) * 100) / 100, pick(['Pizza place', 'Cafe', 'Food truck']));
+  mv(on(4), -32, 'Gym');
+  // Two with no rule, to show the uncategorized list.
+  mv(on(2), -Math.round((5 + rand() * 40) * 100) / 100, pick(['Bookshop', 'Pharmacy', 'Hardware store']));
+  if (last >= 12) mv(on(12), -Math.round(rand() * 60 * 100) / 100, pick(['Bookshop', 'Pharmacy', 'Hardware store']));
+}
+const month = now.toISOString().slice(0, 7);
+fops.push({ type: 'closeMonth', row: { month: finance.prevMonth(finance.prevMonth(month)), total: 9180, byKind: { bank: 8700, cash: 60, defi: 420 } } });
+fops.push({ type: 'closeMonth', row: { month: finance.prevMonth(month), total: 9640, byKind: { bank: 9100, cash: 90, defi: 450 } } });
+write('finance.json', sealSync(finance.serialize(finance.applyOps(finance.emptyDoc(TZ), fops)), PASS));
 
 console.log(`Sample data in ${dir} (password "demo"). Next: python3 tools/serve.py 8767 --demo ${dir}  →  http://127.0.0.1:8767/?demo`);

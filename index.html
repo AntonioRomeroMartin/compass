@@ -183,10 +183,13 @@
         <label>Target (optional)
           <input name="target" inputmode="decimal" placeholder="e.g. 4" autocomplete="off">
         </label>
-        <label>Unit
+        <label id="field-unit">Unit
           <input name="unit" maxlength="20" placeholder="sessions, km, pages…" autocomplete="off">
         </label>
       </div>
+      <label id="field-source" hidden>Progress
+        <select name="source"></select>
+      </label>
       <label>Related repo (optional)
         <input name="repo" maxlength="80" placeholder="e.g. my-project" autocomplete="off">
       </label>

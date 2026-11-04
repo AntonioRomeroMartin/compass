@@ -19,15 +19,15 @@ A static PWA to track **tasks**, **habits**, **goals** (by horizon: daily to yea
   Open Library for books: `openlibrary.org` when you search for one, and its cover images (served from
   `covers.openlibrary.org` and `archive.org`). Open Library sees those searches and which covers are shown.
 - The token and a copy of your data are stored only in your browser's local storage.
-- The **journal** is encrypted in the browser (AES-256-GCM, key from your encryption password with PBKDF2-SHA256)
-  before it is saved: the repo holds only the sealed file, and its commit messages name only the days. The password
+- The **journal**, **trades** and **finance** files are encrypted in the browser (AES-256-GCM, key from your encryption password with PBKDF2-SHA256)
+  before they are saved: the repo holds only the sealed files, and their commit messages name only days or counts. The password
   is remembered on each device where you type it, and the device keeps an open copy (like the rest of the data).
-  **If the password is lost, the journal cannot be recovered.**
+  **If the password is lost, they cannot be recovered.**
 - This repo contains code only: no categories, goals or anyone's data.
 
 ## Data format
 
-Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `books.json`, `journal.json`, `domains.json`), saved with
+Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `books.json`, `journal.json`, `trades.json`, `finance.json`, `domains.json`), saved with
 2-space indentation so diffs stay readable. Commits that change data start with the file's prefix (`goals:`,
 `tasks:`, `domains:`).
 
@@ -154,6 +154,31 @@ In the repo it is stored sealed (`lib/crypt.js`):
 `{ "version": 1, "sealed": "AES-256-GCM", "kdf": { "name": "PBKDF2-SHA256", "iterations": 600000, "salt": "…" }, "iv": "…", "data": "…" }`.
 One entry per day (its text) plus short notes; days with nothing are not kept.
 
+### Finance (`finance.json`, sealed)
+
+Sealed like the journal. Once opened:
+
+```json
+{
+  "version": 1,
+  "timeZone": "Area/City",
+  "domain": "money",
+  "currency": "EUR",
+  "categories": [{ "id": "groceries", "name": "Groceries", "limits": [{ "from": "2026-01", "amount": 250 }] }],
+  "rules": [{ "id": "r_…", "match": "grocer", "category": "groceries" }],
+  "accounts": [{ "id": "bank", "name": "Bank", "kind": "bank", "currency": "EUR", "balance": 1000, "rate": 1, "at": "…", "address": null }],
+  "movements": [{ "id": "m_…", "extId": null, "account": "bank", "date": "2026-01-05", "amount": -20.5, "text": "Grocer", "category": null }],
+  "months": [{ "month": "2025-12", "total": 1000, "byKind": { "bank": 1000 } }],
+  "savings": [{ "goal": "g_…", "kind": "networth", "target": 5000, "base": null }]
+}
+```
+
+A movement's category is its own, else the first rule whose `match` it contains, else uncategorized; `transfer`
+(one's own accounts) stays out of the budget. A limit holds from its month on. Kinds: bank, cash, defi, debt
+(subtracts), other. `months` gets last month's net worth on its own when a month is first opened. A goal with
+`"source": "savings"` in `goals.json` takes its progress and target from `savings` (net worth reaches `target`, or
+grows by it from `base`).
+
 ## Command line
 
 `cli/compass.mjs` reads and changes the same data from a local git checkout of your data repo, with the same
@@ -182,6 +207,7 @@ compass book reading novel
 compass book quote novel "A line worth keeping" --page 41
 secret-tool store --label="compass encryption" service compass key encryption   # the journal's password, once
 compass journal note "Called home"    # also: compass journal [DATE], days, search, write
+compass money                         # budget of this month and net worth (also: categories, rule, account, saving)
 compass help                          # every command (goals, sub-tasks, focus, edit…)
 ```
 

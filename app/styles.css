@@ -390,7 +390,7 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
 .event-when { display: flex; flex-wrap: wrap; gap: 8px; }
 .event-when label { display: flex; flex-direction: column; gap: 2px; font-size: 0.85em; flex: 1 1 8em; }
 
-/* trades: figures, the curve, cut tables, a trade's facts */
+/* money: figures, the curve, cut tables, budget bars, amounts (trades and finance) */
 .figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 10px 0; }
 .figure { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; display: grid; gap: 1px; min-width: 0; }
 .figure b { font-size: 1.05rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -415,3 +415,12 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 12px; }
 .fact { display: grid; gap: 1px; font-size: .9rem; }
 .fact .hint { font-size: .78rem; }
+.amount { font-variant-numeric: tabular-nums; }
+.month-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.month-nav h3 { margin: 0; font-size: 1rem; }
+.cat-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 10px; }
+.cat { display: grid; gap: 4px; }
+.cat-head { display: flex; justify-content: space-between; gap: 10px; font-size: .92rem; }
+.bar span.near { background: var(--warn); }
+.bar span.over { background: var(--danger); }
+.cats-edit input:nth-child(2) { flex: 0 0 7.5em; }
