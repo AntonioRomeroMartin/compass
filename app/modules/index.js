@@ -1,6 +1,6 @@
 // @ts-check
 // The modules of the app. Each module shows its part of an area's page and of that area's card on Home.
-// Tasks, goals and habits show in every area, even empty. Other modules (events, books, budget, trades) show only in the
+// Tasks, goals and habits show in every area, even empty. Other modules (events, books, finance, trades) show only in the
 // areas that have something of theirs (their `shownIn`).
 
 import * as tasks from './tasks/view.js';
@@ -46,7 +46,7 @@ export const MODULES = [
   { id: 'habits', title: 'Habits', addLabel: 'Habit', add: (area) => habits.openHabitForm(undefined, area), areaSections: habits.areaSections, homeCard: habits.homeCard },
   { id: 'events', shownIn: events.hasEvents, title: 'Events', addLabel: 'Event', add: (area) => events.openEventForm(area), areaSections: events.areaSections, homeCard: events.homeCard },
   { id: 'books', shownIn: books.hasBooks, title: 'Books', addLabel: 'Book', add: (area) => books.openBookForm(area), areaSections: books.areaSections, homeCard: books.homeCard },
-  { id: 'finance', shownIn: finance.hasFinance, title: 'Budget', areaSections: finance.areaSections, homeCard: finance.homeCard },
+  { id: 'finance', shownIn: finance.hasFinance, title: 'Finance', areaSections: finance.areaSections, homeCard: finance.homeCard },
   { id: 'trades', shownIn: trades.hasTrades, title: 'Trades', areaSections: trades.areaSections, homeCard: trades.homeCard, banner: trades.limitBanner },
 ];
 

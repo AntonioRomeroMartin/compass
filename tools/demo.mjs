@@ -111,6 +111,8 @@ for (let m = 3; m >= 0; m--) {
   for (let d = 2; d <= last; d += 3) mv(on(d), -Math.round((8 + rand() * 40) * 100) / 100, pick(['Grocer', 'Grocer', 'Market']));
   for (let d = 5; d <= last; d += 9) mv(on(d), -Math.round((6 + rand() * 25) * 100) / 100, pick(['Pizza place', 'Cafe', 'Food truck']));
   mv(on(4), -32, 'Gym');
+  // Two with no rule, to show the uncategorized list.
+  mv(on(2), -Math.round((5 + rand() * 40) * 100) / 100, pick(['Bookshop', 'Pharmacy', 'Hardware store']));
   if (last >= 12) mv(on(12), -Math.round(rand() * 60 * 100) / 100, pick(['Bookshop', 'Pharmacy', 'Hardware store']));
 }
 const month = now.toISOString().slice(0, 7);
