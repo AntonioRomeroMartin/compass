@@ -32,6 +32,9 @@ test('money: categories, rules, movements, budget, net worth, month close and a 
     run('money', 'account', 'set', 'bank', '--kind', 'bank', '--balance', '2000');
     run('money', 'account', 'set', 'loan', '--kind', 'debt', '--balance', '500');
     assert.match(run('money'), /Net worth: 1,500\.00 EUR \(bank 2,000\.00 · debt -500\.00\)/);
+    // Last month's row was kept on its own when finance was opened with balances; `close` rewrites one.
+    const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)) - 2, 1)).toISOString().slice(0, 7);
+    assert.match(run('money', 'history'), new RegExp(`^${last}: 2,000\\.00 \\(bank 2,000\\.00\\)`));
     run('money', 'close', '2026-02');
     assert.match(run('money', 'history'), /2026-02: 1,500\.00/);
     // A savings goal: its figures in the sealed file, only "counted from net worth" in goals.json.

@@ -56,11 +56,11 @@ test('net worth by kind (debts subtract, other currencies by rate) and savings g
     { type: 'setSaving', saving: { goal: 'g1', kind: 'networth', target: 5000, base: null } },
     { type: 'setSaving', saving: { goal: 'g2', kind: 'saved', target: 1000, base: 1200 } },
   ]);
-  const w = finance.netWorth(doc, 300);
-  assert.deepEqual(w.byKind, { bank: 2000, defi: 90, debt: -500, trading: 300 });
-  assert.equal(w.total, 1890);
-  assert.deepEqual(finance.savingProgress(doc, 'g1', w.total), { value: 1890, target: 5000 });
-  assert.deepEqual(finance.savingProgress(doc, 'g2', w.total), { value: 690, target: 1000 });
+  const w = finance.netWorth(doc);
+  assert.deepEqual(w.byKind, { bank: 2000, defi: 90, debt: -500 });
+  assert.equal(w.total, 1590);
+  assert.deepEqual(finance.savingProgress(doc, 'g1', w.total), { value: 1590, target: 5000 });
+  assert.deepEqual(finance.savingProgress(doc, 'g2', w.total), { value: 390, target: 1000 });
   assert.equal(finance.savingProgress(doc, 'none', w.total), null);
 });
 
@@ -70,4 +70,16 @@ test('removing a category frees its movements and rules; closed months keep one 
   assert.equal(finance.budget(doc, '2026-03').uncategorized.length, 2);
   doc = finance.applyOps(doc, [{ type: 'closeMonth', row: { month: '2026-02', total: 1, byKind: {} } }, { type: 'closeMonth', row: { month: '2026-02', total: 2, byKind: { bank: 2 } } }]);
   assert.deepEqual(doc.months, [{ month: '2026-02', total: 2, byKind: { bank: 2 } }]);
+});
+
+test('last month closes on its own once: when a month is first opened, never over a row already there', () => {
+  const empty = finance.emptyDoc();
+  assert.equal(finance.dueClose(empty, '2026-03'), null, 'nothing to count');
+  let doc = finance.applyOps(empty, [{ type: 'setAccount', account: { id: 'a', name: 'Bank', kind: 'bank', currency: 'EUR', balance: 800, rate: 1, at: null, address: null } }]);
+  const op = finance.dueClose(doc, '2026-01');
+  assert.deepEqual(op, { type: 'closeMonth', row: { month: '2025-12', total: 800, byKind: { bank: 800 } }, ifMissing: true });
+  // Another device closed it first: its row stays.
+  doc = finance.applyOps(doc, [{ type: 'closeMonth', row: { month: '2025-12', total: 750, byKind: { bank: 750 } } }, /** @type {finance.Op} */ (op)]);
+  assert.deepEqual(doc.months, [{ month: '2025-12', total: 750, byKind: { bank: 750 } }]);
+  assert.equal(finance.dueClose(doc, '2026-01'), null);
 });

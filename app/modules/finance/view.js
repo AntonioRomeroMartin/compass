@@ -103,7 +103,7 @@ function worthBlock() {
   const accounts = [...d.accounts].sort((a, b) => financeLib.KINDS.indexOf(/** @type {any} */ (a.kind)) - financeLib.KINDS.indexOf(/** @type {any} */ (b.kind)));
   return h('div', { class: 'worth' },
     h('div', { class: 'figures' }, figure('net worth', eur(w.total), w.total < 0 ? 'down' : ''),
-      ...Object.entries(w.byKind).map(([k, v]) => figure(k === 'trading' ? 'Trading' : financeLib.KIND_TEXT[/** @type {financeLib.Kind} */ (k)] ?? k, eur(v), v < 0 ? 'down' : ''))),
+      ...Object.entries(w.byKind).map(([k, v]) => figure(financeLib.KIND_TEXT[/** @type {financeLib.Kind} */ (k)] ?? k, eur(v), v < 0 ? 'down' : ''))),
     series.length ? h('figure', { class: 'curve' }, sparkline([...series, w.total].map((v) => v - series[0]), { label: `Net worth over ${series.length} closed months and now` }),
       h('figcaption', { class: 'hint' }, `Since ${monthLabel([...d.months].reverse()[0].month)} · one point per closed month, then now`)) : null,
     h('ul', { class: 'rows' },
@@ -116,8 +116,16 @@ function worthBlock() {
 
 // ---------------------------------------------------------------- the area's page and Home
 
+/** Keeps last month's row of net worth the first time this month that finance is shown (lib/finance.js dueClose). */
+function closeMonthIfDue() {
+  if (!ready() || !canEdit()) return;
+  const op = financeLib.dueClose(doc(), thisMonth());
+  if (op) queueMicrotask(() => dispatchFinance(op));
+}
+
 /** @param {import('../index.js').AreaScope} _scope */
 export function areaSections(_scope) {
+  closeMonthIfDue();
   const month = shownMonth || thisMonth();
   const b = financeLib.budget(doc(), month);
   const all = doc().movements.filter((m) => m.date.startsWith(month));
@@ -141,6 +149,7 @@ export function areaSections(_scope) {
 /** The area's card on Home: spent of the budget this month, uncategorized, net worth. @param {import('../index.js').AreaScope} scope */
 export function homeCard(scope) {
   if (!hasFinance(scope.ids)) return { stats: [], body: [] };
+  closeMonthIfDue();
   const b = financeLib.budget(doc(), thisMonth());
   /** @type {import('../index.js').HomeCard['stats']} */
   const stats = [

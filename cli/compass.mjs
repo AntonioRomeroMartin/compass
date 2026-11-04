@@ -146,7 +146,8 @@ Usage:
   compass money add --amount N --text T [--date D] [--account A] [--category C|transfer] [--ext ID]
                     (the bank's import adds them; this is for tests)
   compass money categorize <movement> <category|transfer|none>
-  compass money close [YYYY-MM]         keeps the month's net worth (default last month); history: compass money history
+  compass money history                 net worth at the end of each month (kept on its own when the next opens)
+  compass money close [YYYY-MM]         keeps the month's net worth now, replacing its row (default last month)
   compass money saving <goal> networth|saved <target> | none   the goal's progress from net worth
   compass money area <domain>           the area whose page shows the budget
   compass domains

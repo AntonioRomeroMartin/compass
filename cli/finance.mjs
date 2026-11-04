@@ -33,6 +33,12 @@ const movementLine = (m, doc) => `[${m.id}] ${m.date} ${money(m.amount)} ${m.tex
 export function moneyCmd(ctx, kit, sub, rest, flags) {
   const pass = kit.needPassphrase();
   const file = sealedFile(ctx, kit, ctx.cfg.finance, pass, finance);
+  // Last month's row of net worth, the first time finance is opened this month (as in the app).
+  const due = finance.dueClose(file.read(), ctx.today.slice(0, 7));
+  if (due) file.write((d) => {
+    const op = finance.dueClose(d, ctx.today.slice(0, 7));
+    return op ? [op] : [];
+  });
   const doc = file.read();
   const worth = () => finance.netWorth(file.read());
   const month = ctx.today.slice(0, 7);
