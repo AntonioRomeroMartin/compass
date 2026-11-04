@@ -17,6 +17,7 @@ import * as events from '../lib/events.js';
 import * as calendar from '../lib/calendar.js';
 import * as cryptSync from './crypt.mjs';
 import { tradesCmd } from './trades.mjs';
+import { moneyCmd } from './finance.mjs';
 import { webcrypto } from 'node:crypto';
 import { buildToday } from '../lib/today.js';
 import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, readJsonIfExists } from './repo.mjs';
@@ -58,7 +59,7 @@ if (!globalThis.crypto) globalThis.crypto = /** @type {Crypto} */ (/** @type {un
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks, events, habits, books, journal, trades and domains from the command line
+const HELP = `compass — goals, tasks, events, habits, books, journal, trades, money and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
@@ -133,6 +134,21 @@ Usage:
   compass trade edit <trade> [--stop-loss P] [--setup S] [--timeframe T] [--target P] [--emotion 1-5]
                     [--errors "a, b"] [--notes T]   (none clears a field)
   compass trade show|delete <trade> [--yes]
+  compass money [YYYY-MM]               budget of the month (spent against limits, income, saved) and net worth;
+                                        encrypted like the journal
+  compass money uncategorized|movements [YYYY-MM]
+  compass money categories              categories with this month's limit, and the rules
+  compass money category add "name" [--limit N] | limit <cat> N|none [--from YYYY-MM] | rename <cat> "name"
+                                        | remove <cat> --yes
+  compass money rule add "text" <category|transfer> | remove <rule>   a movement containing the text
+  compass money account set <id> [--kind bank|cash|defi|debt|other] [--balance N] [--currency C --rate R]
+                    [--name N] [--address A] | remove <id>
+  compass money add --amount N --text T [--date D] [--account A] [--category C|transfer] [--ext ID]
+                    (the bank's import adds them; this is for tests)
+  compass money categorize <movement> <category|transfer|none>
+  compass money close [YYYY-MM]         keeps the month's net worth (default last month); history: compass money history
+  compass money saving <goal> networth|saved <target> | none   the goal's progress from net worth
+  compass money area <domain>           the area whose page shows the budget
   compass domains
   compass domains root PATH|none        the root folder (its chat sees the agenda of every domain)
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
@@ -441,6 +457,7 @@ async function main() {
     case 'calendar': return calendarCmd(ctx, sub, rest, flags);
     case 'trades':
     case 'trade': return tradesCmd(ctx, KIT, cmd, sub, rest, flags);
+    case 'money': return moneyCmd(ctx, KIT, sub, rest, flags);
     default: fail(`unknown command “${cmd}” (compass help)`);
   }
 }
@@ -1133,7 +1150,7 @@ async function book(ctx, sub, rest, flags) {
   if (saved) console.log(bookLine(saved));
 }
 
-/** What the trades commands (cli/trades.mjs) borrow from here. @type {import('./trades.mjs').Kit} */
+/** What the commands on sealed files (cli/trades.mjs, cli/finance.mjs) borrow from here. @type {import('./sealed.mjs').Kit} */
 const KIT = { fail, attempt, report, domainRef, needPassphrase: () => needPassphrase() };
 
 /** The passphrase of this computer, or an error that says how to set it. */
