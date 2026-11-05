@@ -3,14 +3,17 @@
 ## Current status
 - Version 2.12 (phase 3 done: areas edited in the app, offline editing). The app is a dashboard: Home (one card per area), Today (overdue, today and
   the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and one block per
-  module), Goals, Habits and Books tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Book). Code split into
-  `app/core/`, `app/modules/` (tasks, goals, habits, books, journal, trades, finance) and `app/views/`.
+  module), Goals, Habits and Sources tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Source). Code split into
+  `app/core/`, `app/modules/` (tasks, goals, habits, sources, journal, trades, finance) and `app/views/`.
 - Data: tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags. Goals do not repeat
   and keep one progress number; tasks do not link to goals. Habits (`habits.json`) have no streaks.
-- Area pages: tasks, goals and habits always; other modules (books, trades, finance) only in the areas that have items of theirs.
-- Books (`books.json`): status (want/reading/read/dropped) that sets the start and finish dates, rating, notes, quotes,
-  Open Library search and cover id; no page count; the area is optional (none = general reading). CLI
-  `compass book…`; app: Books tab, a block on the page of areas with books, and a Books card on Home.
+- Area pages: tasks, goals and habits always; other modules (events, sources, trades, finance) only in the areas that have items of theirs.
+- Sources (`sources.json`, was books.json: `compass sources migrate` moves it once): kind (book, video, course,
+  article, podcast), link and/or file (inside the domain folder's `sources/`), status (want/doing/done/dropped/skip
+  = not for me) shown in each kind's words and setting the start and finish dates, rating, notes, quotes, Open
+  Library search and cover id for books; the area is optional. CLI `compass sources` (filters --kind, --status,
+  --domain/--cwd) and `compass source…`; app: Sources tab with a kind filter, a block on the page of areas with
+  sources, and a Sources card on Home.
 - Journal (`journal.json`): one text per day plus notes; sealed with the user's encryption password
   (`lib/crypt.js`: AES-256-GCM, PBKDF2-SHA256; WebCrypto in the app, node:crypto in `cli/crypt.mjs`, same format).
   The app keeps the password per device (More → Encryption password) and shows the journal at the end of Today and
@@ -49,7 +52,7 @@
 - `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
-- Tests: `node --test tests/*.test.mjs` (91), also run by GitHub on every PR.
+- Tests: `node --test tests/*.test.mjs` (95), also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys; it also brings trading balances to net worth) and the
   bank's download (Enable Banking). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.

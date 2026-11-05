@@ -1,6 +1,6 @@
 # Compass
 
-A static PWA to track **tasks**, **habits**, **goals** (by horizon: daily to yearly, or with a deadline), **books** and an encrypted **journal** across **domains** (areas such as work, sport or studies), plus a command line (`compass`) that works on the same data and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
+A static PWA to track **tasks**, **habits**, **goals** (by horizon: daily to yearly, or with a deadline), **sources** (books, videos, courses, articles, podcasts) and an encrypted **journal** across **domains** (areas such as work, sport or studies), plus a command line (`compass`) that works on the same data and prints a compact "today" view for scripts and agents. Anyone can use it with **their own private data**.
 
 ## How to use it
 
@@ -27,7 +27,7 @@ A static PWA to track **tasks**, **habits**, **goals** (by horizon: daily to yea
 
 ## Data format
 
-Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `books.json`, `journal.json`, `trades.json`, `finance.json`, `domains.json`), saved with
+Each kind of data has its own JSON file in the data repo (`goals.json`, `tasks.json`, `habits.json`, `sources.json`, `journal.json`, `trades.json`, `finance.json`, `domains.json`), saved with
 2-space indentation so diffs stay readable. Commits that change data start with the file's prefix (`goals:`,
 `tasks:`, `domains:`).
 
@@ -71,8 +71,8 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - **Domains and goal categories are one list**: a goal's `category` is the id or the name of a domain
   (`Sport` and `sport` both match the `sport` domain). Categories that are not registered keep working as
   plain labels, and `compass domains` lists them so they can be registered. Nothing needs migrating.
-- **Blocks of an area's page:** tasks, goals and habits show in every area, even empty. Books show only in the areas
-  that have some (a domain and its subdomains).
+- **Blocks of an area's page:** tasks, goals and habits show in every area, even empty. Sources (and events, trades,
+  finance) show only in the areas that have some (a domain and its subdomains).
 - A folder belongs to the domain with the **longest** path that contains it (`~/projects/studies/course-a/week-3`
   → `studies/course-a`; whole folder names only). `compass today` scoped to a domain shows it in full and only the
   agenda of its sub-domains with folders of their own, not its parents (see below).
@@ -118,25 +118,32 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - Any past day can be marked or unmarked from the habit's month calendar. `archived: true` retires it and keeps
   its history.
 
-### Books (`books.json`)
+### Sources (`sources.json`)
 
 ```json
 {
   "version": 1,
   "timeZone": "Area/City",
-  "books": [{ "id": "b_…", "title": "…", "author": "…", "domain": null, "status": "reading",
-              "notes": null, "quotes": [{ "id": "q_…", "text": "…", "page": 12 }],
-              "started": "2026-10-20", "finished": null, "rating": null,
-              "olid": "OL…W", "cover": 123, "createdAt": "…" }]
+  "sources": [{ "id": "s_…", "kind": "video", "title": "…", "author": "…", "url": "https://…", "file": "talk.txt",
+                "domain": null, "status": "doing",
+                "notes": null, "quotes": [{ "id": "q_…", "text": "…", "page": 12 }],
+                "started": "2026-10-20", "finished": null, "rating": null,
+                "olid": null, "cover": null, "createdAt": "…" }]
 }
 ```
 
-- `domain` is optional: a book without one is general reading (Books tab and the Books card on Home); a book with
-  one also shows on that area's page.
-- `status`: `want`, `reading`, `read` or `dropped`. Changing it sets the dates: `reading` sets `started` (if empty),
-  `read` and `dropped` set `finished`, `want` clears both. There is no page count.
-- `notes` are your own thoughts; `quotes` are lines from the book, each with an optional page. `rating`: 1-5.
-- `olid` and `cover` come from an Open Library search: only the cover's id is stored, the image is not.
+- A source is anything to learn from: `kind` is `book`, `video`, `course`, `article` or `podcast`.
+- `url` links to it; `file` is a path inside the `sources/` folder of its domain's folder (a PDF, a transcript),
+  kept out of the data repo. Both are optional.
+- `domain` is optional: a source without one shows only in the Sources tab and the Sources card on Home; one with
+  a domain also shows on that area's page.
+- `status`: `want`, `doing`, `done`, `dropped` or `skip` (not for you: kept only as material). It is shown in the
+  words of each kind (Reading, Watching, Listening…). Changing it sets the dates: `doing` sets `started` (if empty),
+  `done` and `dropped` set `finished`, `want` and `skip` clear both.
+- `notes` are your own thoughts; `quotes` are lines from it, each with an optional page. `rating`: 1-5.
+- `olid` and `cover` (books) come from an Open Library search: only the cover's id is stored, the image is not.
+- A `books.json` from before sources (`{ "books": [...] }`, statuses `want`, `reading`, `read`, `dropped`) is
+  moved once with `compass sources migrate`: every book keeps its data.
 
 ### Journal (`journal.json`, sealed)
 
@@ -202,9 +209,11 @@ compass tasks --due week              # also: --domain D, --cwd PATH, --due toda
 compass today --cwd "$PWD"            # what matters in the domain of this folder
 compass habit add "Stretch" --domain sport --freq mon,wed,fri   # or: daily, 3/week
 compass habit done stretch yesterday  # also: today (default), -N, YYYY-MM-DD
-compass book add "A novel" --find    # --find: author and cover from Open Library; --domain D to file it in an area
-compass book reading novel
-compass book quote novel "A line worth keeping" --page 41
+compass source add "A novel" --find  # --find: author and cover from Open Library; --domain D to file it in an area
+compass source add "A talk" --kind video --url https://… --file talk.txt --domain work
+compass source reading novel         # or: want, doing, done, dropped, skip, and each kind's words (watched…)
+compass sources --kind video --status done   # also: --domain D, --cwd PATH
+compass source quote novel "A line worth keeping" --page 41
 secret-tool store --label="compass encryption" service compass key encryption   # the journal's password, once
 compass journal note "Called home"    # also: compass journal [DATE], days, search, write
 compass money                         # budget of this month and net worth (also: categories, rule, account, saving)
