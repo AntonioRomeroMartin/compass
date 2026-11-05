@@ -1,20 +1,16 @@
 # Progress — compass
 
 ## Current status
-- Version 2.12 (phase 3 done: areas edited in the app, offline editing). The app is a dashboard: Home (one card per area), Today (overdue, today and
+- The app is a dashboard: Home (one card per area), Today (overdue, today and
   the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and one block per
   module), Goals, Habits and Books tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Book). Code split into
   `app/core/`, `app/modules/` (tasks, goals, habits, books, journal, trades, finance) and `app/views/`.
-- Data: tasks closed more than 30 days ago move to `tasks-YYYY.json`; the app reads with ETags. Goals do not repeat
-  and keep one progress number; tasks do not link to goals. Habits (`habits.json`) have no streaks.
+- Goals, tasks, habits, books, journal and finance: format and rules in README → «Data format» (journal, trades and
+  finance sealed with the user's encryption password). The app reads with ETags.
+- Sealed files: the app keeps the password per device (More → Encryption password); the CLI takes it from
+  $COMPASS_PASSPHRASE or the keyring (secret-tool). Finance: `compass money add` stands in for the bank's import; no
+  movements by hand in the app.
 - Area pages: tasks, goals and habits always; other modules (books, trades, finance) only in the areas that have items of theirs.
-- Books (`books.json`): status (want/reading/read/dropped) that sets the start and finish dates, rating, notes, quotes,
-  Open Library search and cover id; no page count; the area is optional (none = general reading). CLI
-  `compass book…`; app: Books tab, a block on the page of areas with books, and a Books card on Home.
-- Journal (`journal.json`): one text per day plus notes; sealed with the user's encryption password
-  (`lib/crypt.js`: AES-256-GCM, PBKDF2-SHA256; WebCrypto in the app, node:crypto in `cli/crypt.mjs`, same format).
-  The app keeps the password per device (More → Encryption password) and shows the journal at the end of Today and
-  on its page; the CLI takes it from $COMPASS_PASSPHRASE or the keyring (secret-tool). Commit messages name only days.
 - Areas: Edit on the Areas list adds areas and sub-areas, renames them (the id stays), reorders them by dragging ⠿
   (`move` op; CLI `domain move`) and deletes an empty one (`domains.usage`, shared with CLI `domain delete`).
 - Offline: everything can be edited on the copy saved on the device; changes wait there and are uploaded when back
@@ -32,18 +28,6 @@
   and in Trades, and the "Over a limit" error added by itself. A trade without a stop shows "no stop" and counts in PnL,
   not in R. App: Trades block on its area's page (limits edited there), the trade's sheet, figures on the area's Home
   card. CLI `compass trades|trade` (`cli/trades.mjs`; `trade add` stands in for the import). Commit messages only count.
-- Finance (`finance.json`, sealed; `lib/finance.js`): categories with a monthly limit that holds from the month it is
-  set, rules (text a movement contains → category), accounts (bank, cash, DeFi with its public address, debt, other;
-  other currencies by their rate to EUR) and movements (+ in, − out; the bank's id or day + amount + text keeps imports
-  from repeating). Transfers between one's own accounts stay out of the budget. Budget of a month: spent against limit
-  per category, income, expenses against the average of up to 3 earlier months, saved, and the uncategorized list
-  (pick a category, optionally as a rule). Net worth by kind; trading accounts are left out until the exchanges'
-  import brings their balance. Last month's row of net worth is written the first time the app or CLI opens finance
-  in a new month (never over a row already there). Savings goals: a goal with `source: "savings"` whose progress is
-  the net worth (reach X) or what it grew since it was set (add X); the target stays in the sealed file. App: Finance
-  block on its area's page (month by month), figures and bar on the area's Home card, "Progress" in the goal's sheet.
-  CLI `compass money …` (`cli/finance.mjs`; `money add` stands in for the bank's import; no movements by hand in the
-  app). Commit messages only count.
 - Local preview with sample data: `node tools/demo.mjs DIR`, then `python3 tools/serve.py 8767 --demo DIR` and open
   `/?demo` (a stand-in for GitHub's API on the same server; never touches a real data repo).
 - `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
