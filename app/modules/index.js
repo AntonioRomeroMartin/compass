@@ -1,12 +1,12 @@
 // @ts-check
 // The modules of the app. Each module shows its part of an area's page and of that area's card on Home.
-// Tasks, goals and habits show in every area, even empty. Other modules (events, books, finance, trades) show only in the
+// Tasks, goals and habits show in every area, even empty. Other modules (events, sources, finance, trades) show only in the
 // areas that have something of theirs (their `shownIn`).
 
 import * as tasks from './tasks/view.js';
 import * as goals from './goals/view.js';
 import * as habits from './habits/view.js';
-import * as books from './books/view.js';
+import * as sources from './sources/view.js';
 import * as events from './events/view.js';
 import * as trades from './trades/view.js';
 import * as finance from './finance/view.js';
@@ -45,7 +45,7 @@ export const MODULES = [
   { id: 'goals', title: 'Goals', addLabel: 'Goal', add: (area) => goals.openGoalForm(undefined, area), areaSections: goals.areaSections, homeCard: goals.homeCard },
   { id: 'habits', title: 'Habits', addLabel: 'Habit', add: (area) => habits.openHabitForm(undefined, area), areaSections: habits.areaSections, homeCard: habits.homeCard },
   { id: 'events', shownIn: events.hasEvents, title: 'Events', addLabel: 'Event', add: (area) => events.openEventForm(area), areaSections: events.areaSections, homeCard: events.homeCard },
-  { id: 'books', shownIn: books.hasBooks, title: 'Books', addLabel: 'Book', add: (area) => books.openBookForm(area), areaSections: books.areaSections, homeCard: books.homeCard },
+  { id: 'sources', shownIn: sources.hasSources, title: 'Sources', addLabel: 'Source', add: (area) => sources.openSourceForm(area), areaSections: sources.areaSections, homeCard: sources.homeCard },
   { id: 'finance', shownIn: finance.hasFinance, title: 'Finance', areaSections: finance.areaSections, homeCard: finance.homeCard },
   { id: 'trades', shownIn: trades.hasTrades, title: 'Trades', areaSections: trades.areaSections, homeCard: trades.homeCard, banner: trades.limitBanner },
 ];

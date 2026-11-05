@@ -6,7 +6,7 @@
 // local commit is undone, the remote is pulled again and the operations are re-applied on top.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -17,7 +17,8 @@ import { dirname, join, resolve } from 'node:path';
  * @property {string} tasks    path of tasks.json inside the repo
  * @property {string} domains  path of domains.json inside the repo
  * @property {string} habits   path of habits.json inside the repo
- * @property {string} books    path of books.json inside the repo
+ * @property {string} sources  path of sources.json inside the repo
+ * @property {string} books    path of books.json (before sources) inside the repo: only `compass sources migrate` reads it
  * @property {string} events   path of events.json inside the repo
  * @property {string} journal  path of journal.json (sealed) inside the repo
  * @property {string} trades   path of trades.json (sealed) inside the repo
@@ -41,6 +42,7 @@ export function loadConfig() {
     tasks: raw.tasks ?? 'tasks.json',
     domains: raw.domains ?? 'domains.json',
     habits: raw.habits ?? 'habits.json',
+    sources: raw.sources ?? 'sources.json',
     books: raw.books ?? 'books.json',
     events: raw.events ?? 'events.json',
     journal: raw.journal ?? 'journal.json',
@@ -127,12 +129,12 @@ export function commitChange(cfg, rel, change, opts) {
  * Applies `change` to the current versions of several files and writes them in ONE commit
  * (e.g. a task and the goal it adds to), then pushes. `change` receives the freshly read
  * documents (null for a file that does not exist yet: it is created) and returns the new
- * texts of the files it changes and the commit message, or null if nothing changed.
+ * texts of the files it changes (null removes a file) and the commit message, or null if nothing changed.
  * If the push is rejected because the remote moved, the commit is undone (those files only),
  * the remote is pulled and `change` runs again on the new versions.
  * @param {Config} cfg
  * @param {string[]} rels
- * @param {(docs: Record<string, any>) => { files: Record<string, string>, message: string } | null} change
+ * @param {(docs: Record<string, any>) => { files: Record<string, string | null>, message: string } | null} change
  * @param {{ sync: boolean }} opts
  * @returns {{ pushed: boolean, message: string | null }}
  */
@@ -149,14 +151,19 @@ export function commitFiles(cfg, rels, change, opts) {
       docs[rel] = before[rel] === null ? null : JSON.parse(/** @type {string} */ (before[rel]));
     }
     const result = change(docs);
-    const changed = result ? rels.filter((rel) => typeof result.files[rel] === 'string' && result.files[rel] !== before[rel]) : [];
+    const changed = result ? rels.filter((rel) => rel in result.files && result.files[rel] !== before[rel]) : [];
     if (!result || !changed.length) return { pushed: false, message: null };
     for (const rel of changed) {
       const path = join(cfg.repo, rel);
+      const text = result.files[rel];
+      if (text === null) {
+        rmSync(path);
+        continue;
+      }
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, result.files[rel]);
+      writeFileSync(path, text);
     }
-    git(cfg, ['add', '--', ...changed], LOCAL_TIMEOUT);
+    git(cfg, ['add', '--all', '--', ...changed], LOCAL_TIMEOUT);
     git(cfg, ['commit', '--quiet', '-m', result.message, '--', ...changed], LOCAL_TIMEOUT);
     if (!opts.sync) return { pushed: false, message: result.message };
     try {
