@@ -3,14 +3,14 @@
 ## Current status
 - The app is a dashboard: Home (one card per area), Today (overdue, today and
   the next 7 days, "No date" folded per area), Areas (one page per area with a sub-area filter and one block per
-  module), Goals, Habits and Books tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Book). Code split into
-  `app/core/`, `app/modules/` (tasks, goals, habits, books, journal, trades, finance) and `app/views/`.
-- Goals, tasks, habits, books, journal and finance: format and rules in README → «Data format» (journal, trades and
+  module), Goals, Habits and Sources tabs, a Journal page (from Today and More), and the "+" sheets (Task · Goal · Habit · Source). Code split into
+  `app/core/`, `app/modules/` (tasks, goals, habits, sources, journal, trades, finance) and `app/views/`.
+- Goals, tasks, habits, sources, journal and finance: format and rules in README → «Data format» (journal, trades and
   finance sealed with the user's encryption password). The app reads with ETags.
 - Sealed files: the app keeps the password per device (More → Encryption password); the CLI takes it from
   $COMPASS_PASSPHRASE or the keyring (secret-tool). Finance: `compass money add` stands in for the bank's import; no
   movements by hand in the app.
-- Area pages: tasks, goals and habits always; other modules (books, trades, finance) only in the areas that have items of theirs.
+- Area pages: tasks, goals and habits always; other modules (events, sources, trades, finance) only in the areas that have items of theirs.
 - Areas: Edit on the Areas list adds areas and sub-areas, renames them (the id stays), reorders them by dragging ⠿
   (`move` op; CLI `domain move`) and deletes an empty one (`domains.usage`, shared with CLI `domain delete`).
 - Offline: everything can be edited on the copy saved on the device; changes wait there and are uploaded when back
@@ -33,7 +33,7 @@
 - `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
-- Tests: `node --test tests/*.test.mjs` (91), also run by GitHub on every PR.
+- Tests: `node --test tests/*.test.mjs` (95), also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys; it also brings trading balances to net worth) and the
   bank's download (Enable Banking). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.
