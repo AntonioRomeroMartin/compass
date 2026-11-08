@@ -42,6 +42,21 @@ export function taskRow(t, showArea = false, short = false) {
   );
 }
 
+/**
+ * Fills the read-only list of a task's chats (nested by who opened whom) and shows or hides its box.
+ * @param {HTMLElement} list @param {Task} [task]
+ */
+function chatTree(list, task) {
+  /** @param {ReturnType<typeof tasksLib.chatTree>} nodes @returns {HTMLElement[]} */
+  const items = (nodes) => nodes.map(({ chat, children }) => {
+    const sub = task?.subtasks.find((s) => s.id === tasksLib.chatSubtask(task, chat.id));
+    return h('li', {}, h('span', {}, chat.title || 'Untitled chat'), sub ? h('span', { class: 'chip muted' }, sub.title) : null,
+      children.length ? h('ul', { class: 'chat-tree' }, ...items(children)) : null);
+  });
+  list.replaceChildren(...(task ? items(tasksLib.chatTree(task)) : []));
+  /** @type {HTMLElement} */ (list.parentElement).hidden = !list.children.length;
+}
+
 /** Choices of the "When" chips; "pick" shows the date field. */
 export const WHEN = /** @type {const} */ ([['none', 'No date'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['nextweek', 'Next week'], ['pick', 'Pick date…']]);
 
@@ -100,6 +115,7 @@ export function openTaskForm(task, domain) {
     subList.append(row);
     /** @type {HTMLInputElement} */ (row.querySelector('input')).focus();
   };
+  chatTree($('task-chat-list'), task);
   /** @type {HTMLDetailsElement} */ ($('task-more')).open = false;
 
   const dueValue = () => (when === 'none' ? null : when === 'today' ? today : when === 'tomorrow' ? tasksLib.parseDue('tomorrow', today)

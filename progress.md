@@ -33,7 +33,9 @@
 - `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
-- Tests: `node --test tests/*.test.mjs` (91), also run by GitHub on every PR.
+- Chats linked to tasks (`task.sessions`; `link`/`unlink`/`relink` ops): CLI `task link|unlink|chats|brief`, a
+  read-only tree in the task sheet. Next: linked subtasks (`subtask.task`).
+- Tests: `node --test tests/*.test.mjs` (97), also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys; it also brings trading balances to net worth) and the
   bank's download (Enable Banking). Deferred: day close and Focus in the app (the CLI
   still supports focus), phase 6 summaries of Fitness and University.
