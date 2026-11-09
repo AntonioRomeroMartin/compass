@@ -2,7 +2,7 @@
 // Areas: the list (and its edit mode: add, rename, reorder by dragging, delete), the sidebar tree and the page of one
 // area (built from its modules).
 import * as domainsLib from '../../lib/domains.js';
-import { areaIds, booksStore, canEdit, current, dispatchDomains, domainsStore, habitsStore, persist, render, state, tasksStore, tz } from '../core/data.js';
+import { areaIds, canEdit, current, dispatchDomains, domainsStore, habitsStore, persist, render, sourcesStore, state, tasksStore, tz } from '../core/data.js';
 import { $, chipPicker, h } from '../core/ui.js';
 import { modulesOf } from '../modules/index.js';
 import { isExpired } from '../../lib/goals.js';
@@ -73,7 +73,7 @@ function renderEditList(view) {
     tasks: tasksStore.current().tasks.map((t) => t.domain),
     goals: current().goals.map((g) => g.category),
     habits: habitsStore.current().habits.map((x) => x.domain),
-    books: booksStore.current().books.map((b) => b.domain),
+    sources: sourcesStore.current().sources.map((s) => s.domain),
   });
   /** @param {import('../../lib/domains.js').Domain} d */
   const row = (d) => {

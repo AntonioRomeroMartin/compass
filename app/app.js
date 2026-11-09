@@ -5,8 +5,8 @@ import { openGoalForm, openManage, renderList, renderToolbar, syncFormVisibility
 import { openTaskForm } from './modules/tasks/view.js';
 import { openHabitForm } from './modules/habits/view.js';
 import { renderHabitsView } from './views/habits.js';
-import { openBookForm } from './modules/books/view.js';
-import { renderBooksView } from './views/books.js';
+import { openSourceForm } from './modules/sources/view.js';
+import { renderSourcesView } from './views/sources.js';
 import { openJournal, openPassphrase, renderJournalView } from './modules/journal/view.js';
 import { renderAreas, renderNavAreas } from './views/areas.js';
 import { GOALS_FILE, openSettings } from './views/settings.js';
@@ -14,13 +14,13 @@ import { renderHome } from './views/home.js';
 import { renderTodayView } from './views/today.js';
 import { civilDate, periodKeys } from '../lib/period.js';
 
-/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'books'|'journal'|'more'} Tab */
+/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'sources'|'journal'|'more'} Tab */
 
 /** @type {Tab[]} */
-const TABS = ['home', 'today', 'areas', 'goals', 'habits', 'books', 'journal', 'more'];
+const TABS = ['home', 'today', 'areas', 'goals', 'habits', 'sources', 'journal', 'more'];
 
 /** @type {Record<Tab, string>} */
-const TAB_TITLE = { home: 'Home', today: 'Today', areas: 'Areas', goals: 'Goals', habits: 'Habits', books: 'Books', journal: 'Journal', more: 'More' };
+const TAB_TITLE = { home: 'Home', today: 'Today', areas: 'Areas', goals: 'Goals', habits: 'Habits', sources: 'Sources', journal: 'Journal', more: 'More' };
 
 function renderAll() {
   // A redraw replaces the fields: put the cursor back in the one being typed in (the journal's, for example).
@@ -33,7 +33,7 @@ function renderAll() {
   if (state.tab === 'today') renderTodayView();
   if (state.tab === 'areas') renderAreas();
   if (state.tab === 'habits') renderHabitsView();
-  if (state.tab === 'books') renderBooksView();
+  if (state.tab === 'sources') renderSourcesView();
   if (state.tab === 'journal') renderJournalView();
   if (state.tab === 'goals') {
     renderToolbar();
@@ -210,7 +210,7 @@ function init() {
       const kind = /** @type {HTMLElement} */ (btn).dataset.switch;
       if (kind === 'goal') openGoalForm();
       else if (kind === 'habit') openHabitForm();
-      else if (kind === 'book') openBookForm();
+      else if (kind === 'source') openSourceForm();
       else openTaskForm();
     });
   }
@@ -224,8 +224,8 @@ function init() {
   $('task-dialog').addEventListener('close', () => render());
   $('habit-dialog').addEventListener('close', () => render());
   $('habit-cal-dialog').addEventListener('close', () => render());
-  $('book-form-dialog').addEventListener('close', () => render());
-  $('book-dialog').addEventListener('close', () => render());
+  $('source-form-dialog').addEventListener('close', () => render());
+  $('source-dialog').addEventListener('close', () => render());
   const goalForm = /** @type {HTMLFormElement} */ ($('goal-form'));
   goalForm.addEventListener('change', () => syncFormVisibility(goalForm));
   for (const btn of document.querySelectorAll('[data-close]')) {
