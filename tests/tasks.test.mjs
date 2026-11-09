@@ -409,3 +409,50 @@ test('chats: closing a task or an occurrence does not touch its chats; commit me
   const link = /** @type {import('../lib/tasks.js').Op[]} */ ([{ type: 'unlink', id: 't_a', sessions: ['c1'] }]);
   assert.equal(tasks.commitMessage(link, base, after), 'tasks: chats “Task t_a”');
 });
+
+// ---- Subtasks that are other tasks ----
+
+test('linked subtask: closing, reopening, dropping and deleting the task follow into the subtask', () => {
+  const link = (/** @type {string} */ id, /** @type {string} */ subId, /** @type {string|null} */ to) => /** @type {const} */ ({ type: 'linkSub', id, subId, task: to });
+  let doc = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b', { domain: 'other' }) },
+    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'addSub', id: 't_a', sub: sub('s_2') },
+    link('t_a', 's_1', 't_b'), link('t_a', 's_2', 't_a'), link('t_a', 's_9', 't_b'), // self and unknown subtask: ignored
+    link('t_a', 's_2', 't_nope'),
+  ]);
+  const a = () => doc.tasks[0];
+  assert.deepEqual(a().subtasks.map((s) => s.task), ['t_b', undefined]);
+  assert.deepEqual(tasks.linkedSubtasks(doc, 't_b').map((l) => l.sub.id), ['s_1']);
+  assert.equal(tasks.linkedTask(doc, a().subtasks[0])?.id, 't_b');
+
+  const at = '2026-11-05T00:00:00Z';
+  doc = tasks.applyOps(doc, [{ type: 'done', id: 't_b', at, today: FRI, nextId: null }]);
+  assert.equal(a().subtasks[0].done, true);
+  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }]);
+  assert.equal(a().subtasks[0].done, false);
+  doc = tasks.applyOps(doc, [{ type: 'drop', id: 't_b', at, today: FRI, nextId: null }]);
+  assert.deepEqual(a().subtasks.map((s) => s.id), ['s_2']);
+
+  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }, link('t_a', 's_2', 't_b')]);
+  doc = tasks.applyOps(doc, [{ type: 'delete', id: 't_b' }]);
+  assert.deepEqual(a().subtasks.map((s) => s.id), []);
+  doc = tasks.applyOps(doc, [{ type: 'addSub', id: 't_a', sub: sub('s_3') }, link('t_a', 's_3', null)]);
+  assert.equal(a().subtasks[0].task, undefined);
+});
+
+test('linked subtask: its chats live in the other task', () => {
+  let doc = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b') },
+    { type: 'addSub', id: 't_a', sub: sub('s_1') },
+    { type: 'link', id: 't_a', chat: chat('c1', null, '1') },
+    { type: 'link', id: 't_a', chat: chat('c2', 'c1', '2', 's_1') },
+    { type: 'link', id: 't_a', chat: chat('c3', 'c2', '3') }, // inherits s_1
+  ]);
+  doc = tasks.applyOps(doc, [{ type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' }]);
+  assert.deepEqual(doc.tasks[0].sessions?.map((c) => c.id), ['c1']);
+  assert.deepEqual(doc.tasks[1].sessions?.map((c) => [c.id, c.parent, c.subtask]), [['c2', null, undefined], ['c3', 'c2', undefined]]);
+  // A new chat tied to the subtask is stored in the linked task too.
+  doc = tasks.applyOps(doc, [{ type: 'link', id: 't_a', chat: chat('c4', null, '4', 's_1') }]);
+  assert.deepEqual(doc.tasks[1].sessions?.map((c) => c.id), ['c2', 'c3', 'c4']);
+  assert.deepEqual(doc.tasks[0].sessions?.map((c) => c.id), ['c1']);
+});
