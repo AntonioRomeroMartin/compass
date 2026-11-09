@@ -330,22 +330,25 @@ details.sub-group[open] > summary h3::before { content: "▾"; }
 .task.habit input[type="checkbox"]:checked::after { content: "✓"; color: var(--bg); font-size: .75rem; font-weight: 700; }
 .task.habit input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 
-/* books: rows with a small cover, the book's sheet, the Open Library search */
+/* sources: rows with a small cover (or the kind's sign), the source's sheet, the Open Library search */
 .cover { display: block; flex: none; border-radius: 3px; object-fit: cover; background: var(--border); }
 .cover-s { width: 34px; height: 50px; }
 .cover-m { width: 84px; height: 126px; border-radius: 5px; }
-.cover.blank { border: 1px solid var(--border); background: var(--accent-soft); }
-.book-row { border-bottom: 1px solid var(--border); }
-.book-row:last-child { border-bottom: 0; }
-.book-open { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; background: none; border: 0; text-align: left; font: inherit; color: inherit; }
-.book-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.book-title { overflow-wrap: anywhere; }
-.book-text .hint { font-size: .82rem; }
+.cover.blank { border: 1px solid var(--border); background: var(--accent-soft); display: grid; place-items: center; color: var(--accent); font-size: 1rem; }
+.cover-m.blank { font-size: 2rem; }
+.source-where { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.source-where:empty { display: none; }
+.source-row { border-bottom: 1px solid var(--border); }
+.source-row:last-child { border-bottom: 0; }
+.source-open { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; background: none; border: 0; text-align: left; font: inherit; color: inherit; }
+.source-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.source-title { overflow-wrap: anywhere; }
+.source-text .hint { font-size: .82rem; }
 .stars { color: var(--warn); letter-spacing: 1px; font-size: .85rem; white-space: nowrap; }
 .stars .off { color: var(--border); }
-.book-head { display: flex; gap: 14px; align-items: flex-start; }
-.book-head h2 { margin: 0 0 4px; }
-.book-head p { margin: 0 0 2px; }
+.source-head { display: flex; gap: 14px; align-items: flex-start; }
+.source-head h2 { margin: 0 0 4px; }
+.source-head p { margin: 0 0 2px; }
 .rating { display: flex; gap: 2px; }
 .star { background: none; border: 0; padding: 2px 4px; font-size: 1.5rem; line-height: 1; color: var(--border); }
 .star.on { color: var(--warn); }

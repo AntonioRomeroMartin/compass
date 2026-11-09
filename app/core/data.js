@@ -4,7 +4,7 @@ import * as goalsLib from '../../lib/goals.js';
 import * as tasksLib from '../../lib/tasks.js';
 import * as domainsLib from '../../lib/domains.js';
 import * as habitsLib from '../../lib/habits.js';
-import * as booksLib from '../../lib/books.js';
+import * as sourcesLib from '../../lib/sources.js';
 import * as eventsLib from '../../lib/events.js';
 import * as journalLib from '../../lib/journal.js';
 import * as tradesLib from '../../lib/trades.js';
@@ -16,7 +16,7 @@ import { emptyDoc } from '../../lib/goals.js';
 import { deviceTimeZone, isValidTimeZone, periodKey } from '../../lib/period.js';
 
 /** @typedef {import('../../lib/github.js').RepoConfig} RepoConfig */
-/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'books'|'journal'|'more'} Tab */
+/** @typedef {'home'|'today'|'areas'|'goals'|'habits'|'sources'|'journal'|'more'} Tab */
 
 // localStorage keys keep the "goals." prefix of the first version, so existing devices keep their settings.
 export const LS = { cfg: 'goals.cfg', ui: 'goals.ui', theme: 'compass.theme', passphrase: 'compass.passphrase' };
@@ -43,12 +43,14 @@ export const state = {
   /** day open on the Journal page ('' = today) and the text searched there */
   journalDate: '',
   journalQuery: '',
+  /** kind shown in the Sources tab ('' = every kind) */
+  sourceKind: '',
   /** the Areas list is in edit mode (not kept across reloads) */
   areasEdit: false,
 };
 
 export function persist() {
-  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen, area: state.area, subArea: state.subArea, navOpen: state.navOpen, navExpanded: state.navExpanded });
+  lsSet(LS.ui, { tab: state.tab, view: state.view, filter: state.filter, scope: state.scope, undatedOpen: state.undatedOpen, area: state.area, subArea: state.subArea, sourceKind: state.sourceKind, navOpen: state.navOpen, navExpanded: state.navExpanded });
 }
 
 const cfg = () => state.cfg;
@@ -62,11 +64,11 @@ export const domainsStore = createStore({ mod: domainsLib, file: 'domains.json',
 
 export const habitsStore = createStore({ mod: habitsLib, file: 'habits.json', ls: 'compass.habits', empty: () => habitsLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
 
-export const booksStore = createStore({ mod: booksLib, file: 'books.json', ls: 'compass.books', empty: () => booksLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
+export const sourcesStore = createStore({ mod: sourcesLib, file: 'sources.json', ls: 'compass.sources', empty: () => sourcesLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
 
 export const eventsStore = createStore({ mod: eventsLib, file: 'events.json', ls: 'compass.events', empty: () => eventsLib.emptyDoc(goalsStore.current().timeZone), cfg, onChange: () => render(), ready: () => goalsStore.state.loaded });
 
-export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, booksStore, eventsStore];
+export const STORES = [goalsStore, tasksStore, domainsStore, habitsStore, sourcesStore, eventsStore];
 
 /** The encryption password of this device (one for every sealed file), or null. */
 export const passphrase = () => /** @type {string|null} */ (lsGet(LS.passphrase));
@@ -180,10 +182,10 @@ export function dispatchHabits(...ops) {
   habitsStore.dispatch(ops);
 }
 
-/** @param {...import('../../lib/books.js').Op} ops */
-export function dispatchBooks(...ops) {
+/** @param {...import('../../lib/sources.js').Op} ops */
+export function dispatchSources(...ops) {
   if (!canEdit() || !ops.length) return;
-  booksStore.dispatch(ops);
+  sourcesStore.dispatch(ops);
 }
 
 /** @param {...import('../../lib/events.js').Op} ops */

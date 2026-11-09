@@ -203,7 +203,7 @@ test('domains: move among siblings, new ids from names, usage', () => {
   assert.equal(domains.newId(REGISTRY, 'Course A', 'studies'), 'studies/course-a-2');
   assert.equal(domains.newId(REGISTRY, '¡!'), 'area');
 
-  assert.deepEqual(domains.usage(REGISTRY, 'studies/course-a', { tasks: ['Course A', 'studies', null], goals: ['studies/course-a'], books: [] }), [['tasks', 1], ['goals', 1]]);
+  assert.deepEqual(domains.usage(REGISTRY, 'studies/course-a', { tasks: ['Course A', 'studies', null], goals: ['studies/course-a'], sources: [] }), [['tasks', 1], ['goals', 1]]);
 });
 
 test('domains: validation problems', () => {

@@ -1,13 +1,13 @@
 // @ts-check
 // Home: one card per area with what each of its modules has to say (figures and a few lines); a card opens its area.
-// Above them, the modules' warnings (a risk limit hit). After them, the Books card (every book, with or without an area), which opens the Books tab.
+// Above them, the modules' warnings (a risk limit hit). After them, the Sources card (every source, with or without an area), which opens the Sources tab.
 
 import * as domainsLib from '../../lib/domains.js';
 import { areaIds, domainsStore, goalsStore, loaded, persist, render, state } from '../core/data.js';
 import { $, h } from '../core/ui.js';
 import { MODULES, modulesOf } from '../modules/index.js';
 import { openArea } from './areas.js';
-import { booksHomeCard } from '../modules/books/view.js';
+import { sourcesHomeCard } from '../modules/sources/view.js';
 
 /** @param {string} title @param {import('../modules/index.js').HomeCard[]} parts @param {() => void} open @param {HTMLElement|null} [foot] */
 function card(title, parts, open, foot = null) {
@@ -42,7 +42,7 @@ export function renderHome() {
     return card(d.name, modulesOf(d.id).map((m) => m.homeCard(scope)), () => openArea(d.id),
       kids.length ? h('div', { class: 'chips' }, ...kids.map((k) => h('span', { class: 'chip muted' }, k.name))) : null);
   });
-  const books = card('Books', [booksHomeCard()], () => { state.tab = 'books'; persist(); render(); window.scrollTo(0, 0); });
+  const sources = card('Sources', [sourcesHomeCard()], () => { state.tab = 'sources'; persist(); render(); window.scrollTo(0, 0); });
   // Warnings of the modules (a risk limit hit) go first.
-  view.append(...MODULES.map((m) => m.banner?.() ?? null).filter((x) => x !== null), h('div', { class: 'home-grid' }, ...cards, books));
+  view.append(...MODULES.map((m) => m.banner?.() ?? null).filter((x) => x !== null), h('div', { class: 'home-grid' }, ...cards, sources));
 }

@@ -11,7 +11,7 @@ import { applyOps, commitMessage, emptyDoc, isDone, isExpired, newId, normalize,
 import * as tasks from '../lib/tasks.js';
 import * as domains from '../lib/domains.js';
 import * as habits from '../lib/habits.js';
-import * as books from '../lib/books.js';
+import * as sources from '../lib/sources.js';
 import * as journal from '../lib/journal.js';
 import * as events from '../lib/events.js';
 import * as calendar from '../lib/calendar.js';
@@ -31,8 +31,8 @@ import { NET_TIMEOUT, commitChange, commitFiles, loadConfig, pull, readJson, rea
 /** @typedef {import('../lib/domains.js').DomainsDoc} DomainsDoc */
 /** @typedef {import('../lib/habits.js').Habit} Habit */
 /** @typedef {import('../lib/habits.js').HabitsDoc} HabitsDoc */
-/** @typedef {import('../lib/books.js').Book} Book */
-/** @typedef {import('../lib/books.js').BooksDoc} BooksDoc */
+/** @typedef {import('../lib/sources.js').Source} Source */
+/** @typedef {import('../lib/sources.js').SourcesDoc} SourcesDoc */
 /** @typedef {import('../lib/journal.js').JournalDoc} JournalDoc */
 /** @typedef {import('../lib/events.js').Event} Event */
 /** @typedef {import('../lib/events.js').EventsDoc} EventsDoc */
@@ -54,12 +54,12 @@ if (!globalThis.crypto) globalThis.crypto = /** @type {Crypto} */ (/** @type {un
  * @property {TasksDoc} tasks
  * @property {DomainsDoc} domains
  * @property {HabitsDoc} habits
- * @property {BooksDoc} books
+ * @property {SourcesDoc} sources
  * @property {EventsDoc} events
  * @property {boolean} sync
  */
 
-const HELP = `compass — goals, tasks, events, habits, books, journal, trades, money and domains from the command line
+const HELP = `compass — goals, tasks, events, habits, sources, journal, trades, money and domains from the command line
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
@@ -113,16 +113,24 @@ Usage:
   compass habit edit <habit> [--title T] [--domain D] [--freq F] [--notes T]
   compass habit archive|unarchive <habit>
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
-  compass books [--domain D | --cwd PATH] [--status S]
-  compass book find "text"              search Open Library
-  compass book add "title" [--domain D | --cwd PATH] [--author A] [--status S] [--find]   (no domain: general reading)
-                                        --find: author and cover from the first Open Library match
-  compass book want|reading|read|dropped <book>   sets the dates: started on reading, finished on read/dropped
-  compass book rate <book> 1-5|none
-  compass book quote <book> "text" [--page N] | --remove <quote>
-  compass book edit <book> [--title T] [--author A] [--domain D|none] [--notes T] [--started DATE] [--finished DATE]
-  compass book show <book>
-  compass book delete <book> --yes
+  compass sources [--domain D | --cwd PATH] [--kind K] [--status S]
+                                        K: book, video, course, article, podcast; S: want, doing, done,
+                                        dropped, skip (not for me: kept only as material)
+  compass sources migrate               books.json → sources.json, once (every book keeps its data)
+  compass source find "text"            search Open Library (books)
+  compass source add "title" [--kind K] [--domain D | --cwd PATH] [--author A] [--url U] [--file F]
+                   [--status S] [--find]
+                                        no domain: general; --file: path inside the domain folder's sources/;
+                                        --find: author and cover from the first Open Library match (books)
+  compass source want|doing|done|dropped|skip <source>
+                                        also the words of each kind (reading, watched, listening…); sets the
+                                        dates: started on doing, finished on done/dropped
+  compass source rate <source> 1-5|none
+  compass source quote <source> "text" [--page N] | --remove <quote>
+  compass source edit <source> [--title T] [--kind K] [--author A] [--url U] [--file F] [--domain D|none]
+                   [--notes T] [--started DATE] [--finished DATE]   (none clears a field)
+  compass source show <source>
+  compass source delete <source> --yes
   compass journal [DATE]                one day (default today); the journal is encrypted: the password
                                         comes from $COMPASS_PASSPHRASE or the keyring (secret-tool)
   compass journal days [--last N]       the last N days (default 7)
@@ -164,7 +172,7 @@ Usage:
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
                    [--calendar ID|none] [--calendar-color N|none]   (calendar of its events; inherited)
   compass domain move <id> --before <id>|--last   order among its siblings (as the app lists them)
-  compass domain delete <id> --yes      only an empty one: no sub-domains, tasks, goals, habits or books
+  compass domain delete <id> --yes      only an empty one: no sub-domains, tasks, goals, habits or sources
   compass goals [--past|--archived|--all] [--category C]
   compass goal add --title T --category C --horizon day|week|month|quarter|year|deadline
                    [--target N] [--unit U] [--deadline YYYY-MM-DD]
@@ -445,7 +453,7 @@ async function main() {
     cfg, now, sync, tz, gtz: isValidTimeZone(goalsDoc.timeZone) ? goalsDoc.timeZone : tz, today: periodKey('day', now, tz),
     goals: goalsDoc, tasks: tasksDoc, domains: domains.normalize(readJsonIfExists(cfg, cfg.domains) ?? domains.emptyDoc()),
     habits: habits.normalize(readJsonIfExists(cfg, cfg.habits) ?? habits.emptyDoc()),
-    books: books.normalize(readJsonIfExists(cfg, cfg.books) ?? books.emptyDoc()),
+    sources: sources.normalize(readJsonIfExists(cfg, cfg.sources) ?? sources.emptyDoc()),
     events: events.normalize(readJsonIfExists(cfg, cfg.events) ?? events.emptyDoc()),
   };
 
@@ -459,8 +467,8 @@ async function main() {
     case 'goal': return goal(ctx, sub, rest, flags);
     case 'habits': return listHabits(ctx, flags);
     case 'habit': return habit(ctx, sub, rest, flags);
-    case 'books': return listBooks(ctx, flags);
-    case 'book': return book(ctx, sub, rest, flags);
+    case 'sources': return sub === 'migrate' ? migrateSources(ctx) : listSources(ctx, flags);
+    case 'source': return source(ctx, sub, rest, flags);
     case 'journal': return journalCmd(ctx, sub, rest, flags);
     case 'events': return listEvents(ctx, flags);
     case 'event': return event(ctx, sub, rest, flags);
@@ -875,9 +883,9 @@ function listDomains(ctx) {
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
   for (const d of doc.domains) print(d, 0); // left out by a cycle
   if (doc.root) console.log(`root folder: ${doc.root} (its chat sees the agenda of every domain)`);
-  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.books.books.map((b) => b.domain), ...ctx.events.events.map((e) => e.domain)])]
+  const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.sources.sources.map((s) => s.domain), ...ctx.events.events.map((e) => e.domain)])]
     .filter((c) => c && !domains.domainOfCategory(doc, c));
-  if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks, habits or books): ${loose.join(', ')}`);
+  if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks, habits or sources): ${loose.join(', ')}`);
   for (const p of domains.validate(doc)) console.error(`warning: ${p}`);
 }
 
@@ -934,7 +942,7 @@ function domain(ctx, sub, rest, flags, lists) {
       tasks: ctx.tasks.tasks.map((t) => t.domain),
       goals: ctx.goals.goals.map((g) => g.category),
       habits: ctx.habits.habits.map((x) => x.domain),
-      books: ctx.books.books.map((b) => b.domain),
+      sources: ctx.sources.sources.map((s) => s.domain),
       events: ctx.events.events.map((e) => e.domain),
     });
     if (used.length) fail(`“${id}” is still used by ${used.map(([what, n]) => `${n} ${what}`).join(', ')}; move them first`);
@@ -1077,84 +1085,111 @@ function habit(ctx, sub, rest, flags) {
 }
 
 /**
- * One line per book: status, author, rating, dates and domain.
- * @param {Book} b @param {{ domain?: boolean }} [opts]
+ * One line per source: kind, status, author, rating, dates and domain.
+ * @param {Source} s @param {{ domain?: boolean }} [opts]
  */
-function bookLine(b, opts = {}) {
-  const mark = { reading: '▸', want: '·', read: '✓', dropped: '✗' }[b.status];
-  const bits = [books.STATUS_TEXT[b.status].toLowerCase()];
-  if (b.author) bits.push(b.author);
-  if (b.rating) bits.push('★'.repeat(b.rating));
-  if (b.started || b.finished) bits.push([b.started ?? '?', b.finished ?? ''].join(' → ').replace(/ → $/, ''));
-  if (b.quotes.length) bits.push(`${b.quotes.length} quote${b.quotes.length === 1 ? '' : 's'}`);
-  if (b.notes) bits.push('notes');
-  if (opts.domain !== false && b.domain) bits.push(b.domain);
-  return `${mark} [${b.id}] ${b.title} — ${bits.join(' · ')}`;
+function sourceLine(s, opts = {}) {
+  const mark = { doing: '▸', want: '·', done: '✓', dropped: '✗', skip: '–' }[s.status];
+  const bits = [s.kind, sources.statusText(s).toLowerCase()];
+  if (s.author) bits.push(s.author);
+  if (s.rating) bits.push('★'.repeat(s.rating));
+  if (s.started || s.finished) bits.push([s.started ?? '?', s.finished ?? ''].join(' → ').replace(/ → $/, ''));
+  if (s.quotes.length) bits.push(`${s.quotes.length} quote${s.quotes.length === 1 ? '' : 's'}`);
+  if (s.notes) bits.push('notes');
+  if (opts.domain !== false && s.domain) bits.push(s.domain);
+  return `${mark} [${s.id}] ${s.title} — ${bits.join(' · ')}`;
 }
 
-/** @param {BooksDoc} doc @param {string | undefined} ref @returns {Book} */
-function findBook(doc, ref) {
-  if (!ref) fail('which book? (id or part of the title)');
-  const byId = doc.books.find((x) => x.id === ref);
+/** @param {SourcesDoc} doc @param {string | undefined} ref @returns {Source} */
+function findSource(doc, ref) {
+  if (!ref) fail('which source? (id or part of the title)');
+  const byId = doc.sources.find((x) => x.id === ref);
   if (byId) return byId;
   const q = ref.toLowerCase();
-  const pool = doc.books.filter((x) => x.title.toLowerCase().includes(q));
+  const pool = doc.sources.filter((x) => x.title.toLowerCase().includes(q));
   if (pool.length === 1) return pool[0];
-  if (!pool.length) fail(`no book matches “${ref}”`);
-  return fail(`“${ref}” matches several books:\n${pool.map((x) => `  [${x.id}] ${x.title}`).join('\n')}`);
+  if (!pool.length) fail(`no source matches “${ref}”`);
+  return fail(`“${ref}” matches several sources:\n${pool.map((x) => `  [${x.id}] ${x.title}`).join('\n')}`);
 }
 
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
-function listBooks(ctx, flags) {
+function listSources(ctx, flags) {
+  if (needsMigration(ctx)) console.error('note: there is a books.json and no sources.json yet: run compass sources migrate');
   const scope = scopeFrom(ctx, flags);
   if (scope.note && !scope.id) console.error(`note: ${scope.note}; listing every domain`);
   const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
-  const status = str(flags.status) ? attempt(() => books.parseStatus(/** @type {string} */ (str(flags.status)))) : null;
-  const list = ctx.books.books
-    .filter((b) => (!own || (b.domain && own.has(domains.canonical(ctx.domains, b.domain)))) && (!status || b.status === status))
-    .sort(books.byStatus);
-  if (!list.length) console.log('No books.');
-  for (const b of list) console.log(bookLine(b));
+  /** @template T @param {string} name @param {(text: string) => T} parse @returns {T | null} */
+  const filter = (name, parse) => (str(flags[name]) ? attempt(() => parse(/** @type {string} */ (str(flags[name])))) : null);
+  const kind = filter('kind', sources.parseKind);
+  const status = filter('status', sources.parseStatus);
+  const list = ctx.sources.sources
+    .filter((s) => (!own || (s.domain && own.has(domains.canonical(ctx.domains, s.domain))))
+      && (!kind || s.kind === kind) && (!status || s.status === status))
+    .sort(sources.byStatus);
+  if (!list.length) console.log('No sources.');
+  for (const s of list) console.log(sourceLine(s));
 }
 
-/** @param {Book} b */
-function showBook(b) {
-  console.log(bookLine(b));
-  if (b.olid || b.cover) console.log(`  Open Library: ${[b.olid && `${books.OPEN_LIBRARY}/works/${b.olid}`, b.cover && books.coverUrl(b.cover)].filter(Boolean).join(' · ')}`);
-  if (b.notes) console.log(b.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
-  for (const q of b.quotes) console.log(`  “${q.text}”${q.page ? ` (p. ${q.page})` : ''} [${q.id}]`);
+/** @param {Source} s */
+function showSource(s) {
+  console.log(sourceLine(s));
+  if (s.url) console.log(`  Link: ${s.url}`);
+  if (s.file) console.log(`  File: sources/${s.file}`);
+  if (s.olid || s.cover) console.log(`  Open Library: ${[s.olid && `${sources.OPEN_LIBRARY}/works/${s.olid}`, s.cover && sources.coverUrl(s.cover)].filter(Boolean).join(' · ')}`);
+  if (s.notes) console.log(s.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
+  for (const q of s.quotes) console.log(`  “${q.text}”${q.page ? ` (p. ${q.page})` : ''} [${q.id}]`);
+}
+
+/** A books.json from before sources, and no sources.json yet. @param {Ctx} ctx */
+const needsMigration = (ctx) => !ctx.sources.sources.length && readJsonIfExists(ctx.cfg, ctx.cfg.sources) === null && readJsonIfExists(ctx.cfg, ctx.cfg.books) !== null;
+
+/** books.json → sources.json in one commit: every book keeps its data. @param {Ctx} ctx */
+function migrateSources(ctx) {
+  const { sources: to, books: from } = ctx.cfg;
+  const res = commitFiles(ctx.cfg, [to, from], (docs) => {
+    if (docs[to] !== null) fail(`${to} already exists: nothing to migrate`);
+    if (docs[from] === null) fail(`there is no ${from} to migrate`);
+    const doc = sources.normalize(docs[from]);
+    const n = doc.sources.length;
+    return { files: { [to]: sources.serialize(doc), [from]: null }, message: `sources: from ${from} (${n} book${n === 1 ? '' : 's'})` };
+  }, { sync: ctx.sync });
+  report(res, ctx.sync);
 }
 
 /** Open Library search with a time limit. @param {string} query @param {number} [limit] */
 async function findOnline(query, limit) {
   try {
-    return await books.search(query, { limit, signal: AbortSignal.timeout(NET_TIMEOUT) });
+    return await sources.search(query, { limit, signal: AbortSignal.timeout(NET_TIMEOUT) });
   } catch (e) {
     return fail(`could not search Open Library: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
-/** @param {books.Found} f */
+/** @param {sources.Found} f */
 const foundLine = (f) => `${f.title} — ${[f.author, f.year, f.olid].filter(Boolean).join(' · ')}`;
+
+/** Sub-commands that are not a status. */
+const SOURCE_ACTIONS = new Set(['find', 'add', 'show', 'rate', 'quote', 'edit', 'delete']);
 
 /**
  * @param {Ctx} ctx @param {string | undefined} sub @param {string[]} rest
  * @param {Record<string, string | true>} flags
  */
-async function book(ctx, sub, rest, flags) {
+async function source(ctx, sub, rest, flags) {
   /** @param {string} raw @param {string} what @param {number} min @param {number} [max] */
   const int = (raw, what, min, max = Infinity) => {
     const n = Number(raw);
     if (!Number.isInteger(n) || n < min || n > max) fail(`${what} must be a whole number${max < Infinity ? ` from ${min} to ${max}` : ` of at least ${min}`}`);
     return n;
   };
-  /** @type {books.Op[]} */
+  /** @type {sources.Op[]} */
   let ops;
   /** @type {string} */
   let id;
+  if (needsMigration(ctx)) fail('there is a books.json and no sources.json yet: run compass sources migrate first');
   if (sub === 'find') {
     const query = rest.join(' ').trim();
-    if (!query) fail('book find needs some text: compass book find "title or author"');
+    if (!query) fail('source find needs some text: compass source find "title or author"');
     const found = await findOnline(query, 8);
     if (!found.length) console.log('Nothing found.');
     for (const f of found) console.log(foundLine(f));
@@ -1162,12 +1197,14 @@ async function book(ctx, sub, rest, flags) {
   }
   if (sub === 'add') {
     const title = rest[0] ?? str(flags.title);
-    if (!title) fail('book add needs a title: compass book add "title" [--domain D]');
-    // No domain (or a folder of none): general reading.
+    if (!title) fail('source add needs a title: compass source add "title" [--kind K] [--domain D]');
+    // No domain (or a folder of none): general, in no area.
     const domain = scopeFrom(ctx, flags).id;
-    /** @type {Partial<Book>} */
-    const fields = { author: orNull(str(flags.author)) };
+    const kind = str(flags.kind) ? attempt(() => sources.parseKind(/** @type {string} */ (str(flags.kind)))) : 'book';
+    /** @type {Partial<Source>} */
+    const fields = { kind, author: orNull(str(flags.author)), url: orNull(str(flags.url)), file: orNull(str(flags.file)) };
     if (flags.find) {
+      if (kind !== 'book') fail('--find searches Open Library: only for books');
       const [f] = await findOnline([title, fields.author].filter(Boolean).join(' '), 1);
       if (!f) console.error('note: nothing found on Open Library; added without cover');
       else {
@@ -1175,71 +1212,71 @@ async function book(ctx, sub, rest, flags) {
         Object.assign(fields, { author: fields.author ?? f.author, olid: f.olid, cover: f.cover });
       }
     }
-    let b = books.newBook({ title, domain, ...fields }, ctx.now);
-    const status = str(flags.status) ? attempt(() => books.parseStatus(/** @type {string} */ (str(flags.status)))) : 'want';
-    b = { ...b, ...books.withStatus(b, status, ctx.today) };
-    id = b.id;
-    ops = [{ type: 'add', book: b }];
+    let s = sources.newSource({ title, domain, ...fields }, ctx.now);
+    const status = str(flags.status) ? attempt(() => sources.parseStatus(/** @type {string} */ (str(flags.status)))) : 'want';
+    s = { ...s, ...sources.withStatus(s, status, ctx.today) };
+    id = s.id;
+    ops = [{ type: 'add', source: s }];
   } else {
-    const b = findBook(ctx.books, rest[0]);
-    id = b.id;
-    switch (sub) {
+    if (!sub) fail('which action? compass help');
+    // A status: want, doing, done, dropped, skip (or reading, watched…).
+    const status = SOURCE_ACTIONS.has(sub) ? null : attempt(() => sources.parseStatus(sub));
+    const s = findSource(ctx.sources, rest[0]);
+    id = s.id;
+    if (status) ops = [{ type: 'status', id, status, today: ctx.today }];
+    else switch (sub) {
       case 'show':
-        return showBook(b);
-      case 'want':
-      case 'reading':
-      case 'read':
-      case 'dropped':
-        ops = [{ type: 'status', id, status: sub, today: ctx.today }];
-        break;
+        return showSource(s);
       case 'rate':
-        if (!rest[1]) fail('which rating? compass book rate <book> 1-5 (or none)');
+        if (!rest[1]) fail('which rating? compass source rate <source> 1-5 (or none)');
         ops = [{ type: 'edit', id, fields: { rating: orNull(rest[1]) === null ? null : int(rest[1], 'the rating', 1, 5) } }];
         break;
       case 'quote': {
         const remove = str(flags.remove);
         if (remove) {
-          if (!b.quotes.some((q) => q.id === remove)) fail(`“${b.title}” has no quote ${remove} (compass book show)`);
+          if (!s.quotes.some((q) => q.id === remove)) fail(`“${s.title}” has no quote ${remove} (compass source show)`);
           ops = [{ type: 'removeQuote', id, quoteId: remove }];
           break;
         }
         const text = rest[1]?.trim();
-        if (!text) fail('which quote? compass book quote <book> "text" [--page N]');
+        if (!text) fail('which quote? compass source quote <source> "text" [--page N]');
         const page = str(flags.page) ? int(/** @type {string} */ (str(flags.page)), '--page', 1) : null;
-        ops = [{ type: 'addQuote', id, quote: { id: books.newId('q_'), text, page } }];
+        ops = [{ type: 'addQuote', id, quote: { id: sources.newId('q_'), text, page } }];
         break;
       }
       case 'edit': {
-        /** @type {books.BookFields} */
+        /** @type {sources.SourceFields} */
         const fields = {};
         if (str(flags.title)) fields.title = str(flags.title);
-        if (str(flags.author) !== undefined) fields.author = orNull(str(flags.author));
+        if (str(flags.kind)) fields.kind = attempt(() => sources.parseKind(/** @type {string} */ (str(flags.kind))));
+        for (const k of /** @type {const} */ (['author', 'url', 'file', 'notes'])) {
+          if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
+        }
         if (str(flags.domain)) fields.domain = orNull(str(flags.domain)) === null ? null : domainRef(ctx, /** @type {string} */ (str(flags.domain)));
-        if (str(flags.notes) !== undefined) fields.notes = orNull(str(flags.notes));
         for (const k of /** @type {const} */ (['started', 'finished'])) {
           if (str(flags[k]) !== undefined) fields[k] = attempt(() => tasks.parseDue(/** @type {string} */ (str(flags[k])), ctx.today));
         }
-        if (!Object.keys(fields).length) fail('nothing to change: --title, --author, --domain, --notes, --started or --finished');
+        if (!Object.keys(fields).length) fail('nothing to change: --title, --kind, --author, --url, --file, --domain, --notes, --started or --finished');
         ops = [{ type: 'edit', id, fields }];
         break;
       }
       case 'delete':
-        if (!flags.yes) fail(`delete removes “${b.title}” with its notes and quotes for good. Add --yes to delete it.`);
+        if (!flags.yes) fail(`delete removes “${s.title}” with its notes and quotes for good. Add --yes to delete it.`);
         ops = [{ type: 'delete', id }];
         break;
       default:
-        return fail(`unknown book action “${sub}” (compass help)`);
+        return fail(`unknown source action “${sub}” (compass help)`);
     }
   }
-  const res = commitChange(ctx.cfg, ctx.cfg.books, (raw) => {
-    const before = raw ? books.normalize(raw) : books.emptyDoc(ctx.tz);
-    const after = books.applyOps(before, ops);
-    if (books.serialize(after) === books.serialize(before)) return null;
-    return { text: books.serialize(after), message: books.commitMessage(ops, before, after) };
+  const res = commitChange(ctx.cfg, ctx.cfg.sources, (raw) => {
+    const before = raw ? sources.normalize(raw) : sources.emptyDoc(ctx.tz);
+    const after = sources.applyOps(before, ops);
+    if (sources.serialize(after) === sources.serialize(before)) return null;
+    return { text: sources.serialize(after), message: sources.commitMessage(ops, before, after) };
   }, { sync: ctx.sync });
   report(res, ctx.sync);
-  const saved = books.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.books)).books.find((x) => x.id === id);
-  if (saved) console.log(bookLine(saved));
+  const saved = sources.normalize(readJsonIfExists(ctx.cfg, ctx.cfg.sources)).sources.find((x) => x.id === id);
+  if (saved) console.log(sourceLine(saved));
 }
 
 /** What the commands on sealed files (cli/trades.mjs, cli/finance.mjs) borrow from here. @type {import('./sealed.mjs').Kit} */
