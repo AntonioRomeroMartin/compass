@@ -34,7 +34,8 @@
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
 - Chats linked to tasks (`task.sessions`; `link`/`unlink`/`relink` ops): CLI `task link|unlink|chats|brief`, a
-  read-only tree in the task sheet. Next: linked subtasks (`subtask.task`).
+  read-only tree in the task sheet. Linked subtasks (`subtask.task`, `linkSub` op, CLI `task sub --task|--domain|--link`):
+  a subtask that is another task closes, reopens and goes away with it; its chats live in that task.
 - Tests: `node --test tests/*.test.mjs`, also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys; it also brings trading balances to net worth) and the
   bank's download (Enable Banking). Deferred: day close and Focus in the app (the CLI

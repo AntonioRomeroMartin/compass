@@ -105,6 +105,10 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   subtask and its sub-chats inherit it. A chat belongs to one task. Compass only stores the links (the CLI and the
   task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Unlinking a
   chat moves its sub-chats up one level, and a repeating task's next occurrence starts with none.
+- A subtask may carry `task`: the id of another task (same domain or another) that it is the same thing as.
+  Completing or reopening either one does the same to the other; dropping or deleting the task removes the
+  subtask; the chats of the subtask live in that task. The CLI (`task sub … --task|--domain|--link`) also closes,
+  reopens and drops the other side when a subtask is changed; confirming first is up to the caller.
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 
 ### Habits (`habits.json`)
@@ -212,6 +216,7 @@ printf '%s\n' '"Pay the fee" --due +3' '"Book a room" --domain home' \
   | compass task add --stdin --domain studies   # several tasks, one commit; options here apply to every line
 compass task done "problem set"       # a task by id or part of its title
 compass task link "report" SESSION --title "Draft" [--parent SESSION] [--subtask outline]   # record a chat on a task
+compass task sub "trip" --add "Book flights" --domain studies   # a subtask that is its own task in another domain
 compass task chats "report"           # its chats as a tree (--prune a,b forgets the ones listed; unlink does the same)
 compass task brief "report"           # starter text for a new chat: title, notes, subtasks, date, chats
 compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none

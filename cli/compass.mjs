@@ -81,7 +81,13 @@ Usage:
   compass task move <task> [DATE]       default: tomorrow
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T] [--location T] [--event E]   (none clears a field)
-  compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
+  compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask> [--yes]
+  compass task sub <task> --add T --task <other> | --domain D
+  compass task sub <task> --link <subtask> --task <other>|none
+                                        a subtask that is another task (same or another domain): --add T --domain D
+                                        creates that task; completing or reopening either does the same to the
+                                        other, dropping or deleting the task removes the subtask, removing the
+                                        subtask (--yes) drops the task; its chats move to that task
   compass task link <task> <session> [--title T] [--parent <session>] [--subtask <subtask>] [--move]
                                         record a chat session working on the task (--parent: the chat that
                                         opened it; --subtask: the subtask it is about, inherited by its
@@ -722,19 +728,42 @@ function task(ctx, sub, rest, flags) {
       }
       case 'sub': {
         const add = str(flags.add);
+        const other = str(flags.task) && str(flags.task) !== 'none' ? findTask(ctx.tasks, str(flags.task)) : undefined;
+        if (other?.id === tid) fail('a subtask cannot be its own task');
         if (add) {
           const subId = newId('s_');
-          build = () => ({ tasks: [{ type: 'addSub', id: tid, sub: { id: subId, title: add, done: false } }] });
+          // --task T: the subtask is that task; --domain D: a new task is created there for it.
+          const created = !other && str(flags.domain) ? tasks.newTask({ title: add, domain: domainRef(ctx, /** @type {string} */ (str(flags.domain))) }, ctx.now) : undefined;
+          const link = other?.id ?? created?.id;
+          build = () => ({
+            tasks: [...(created ? [/** @type {const} */ ({ type: 'add', task: created })] : []),
+              { type: 'addSub', id: tid, sub: { id: subId, title: add, done: other?.status === 'done', ...(link ? { task: link } : {}) } }],
+          });
+          break;
+        }
+        if (flags.link) {
+          const subId = subtaskRef(t, /** @type {string} */ (str(flags.link))).id;
+          if (!str(flags.task)) fail('--link needs --task <task> (or --task none to unlink)');
+          build = () => ({ tasks: [{ type: 'linkSub', id: tid, subId, task: other?.id ?? null }] });
           break;
         }
         const ref = str(flags.remove) ?? rest[1];
-        const q = String(ref ?? '').toLowerCase();
-        const matches = t.subtasks.filter((s) => s.id === ref || s.title.toLowerCase().includes(q));
-        if (!q || matches.length !== 1) fail(matches.length ? 'that matches several subtasks' : 'no subtask matches');
-        const subId = matches[0].id;
-        build = () => ({
-          tasks: [str(flags.remove) ? { type: 'removeSub', id: tid, subId } : { type: 'toggleSub', id: tid, subId, done: !flags.undo }],
-        });
+        const subId = subtaskRef(t, String(ref ?? '')).id;
+        const linked = tasks.linkedTask(ctx.tasks, /** @type {import('../lib/tasks.js').Subtask} */ (t.subtasks.find((x) => x.id === subId)));
+        if (str(flags.remove) && linked?.status === 'open' && !flags.yes) {
+          fail(`“${linked.title}” is this subtask too: removing it drops that task as well. Add --yes to do it.`);
+        }
+        build = (fresh) => {
+          const cur = live(fresh);
+          const other = tasks.linkedTask(fresh, cur.subtasks.find((x) => x.id === subId) ?? { id: '', title: '', done: false });
+          /** @type {import('../lib/tasks.js').Op[]} */
+          const ops = [str(flags.remove) ? { type: 'removeSub', id: tid, subId } : { type: 'toggleSub', id: tid, subId, done: !flags.undo }];
+          // The task that is the same thing follows: closed together, reopened together.
+          if (other && str(flags.remove) && other.status === 'open') ops.push({ type: 'drop', id: other.id, at, today: ctx.today, nextId: null });
+          else if (other && !str(flags.remove) && flags.undo && other.status !== 'open') ops.push({ type: 'reopen', id: other.id });
+          else if (other && !str(flags.remove) && !flags.undo && other.status === 'open') ops.push({ type: 'done', id: other.id, at, today: ctx.today, nextId: other.repeat ? newId('t_') : null });
+          return { tasks: ops };
+        };
         break;
       }
       case 'link': {
@@ -848,7 +877,7 @@ function focusFull(doc) {
 /** @param {Task} t @param {Ctx} ctx */
 function showTask(t, ctx) {
   console.log(taskLine(t, ctx));
-  for (const s of t.subtasks) console.log(`  ${s.done ? '[x]' : '[ ]'} ${s.title} (${s.id})`);
+  for (const s of t.subtasks) console.log(`  ${s.done ? '[x]' : '[ ]'} ${s.title} (${s.id})${s.task ? ` → task ${s.task}` : ''}`);
   if (t.notes) console.log(t.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
   const chats = chatLines(t, '  ');
   if (chats.length) console.log(['  chats:', ...chats].join('\n'));

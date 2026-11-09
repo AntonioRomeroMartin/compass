@@ -354,3 +354,45 @@ test('chats: closing a task leaves its chats for the agent to clean up; brief gi
   assert.match(run('task', 'chats', 'report'), /Main chat \[local_1\]/);
   assert.equal(read('a', 'tasks.json').tasks[0].sessions.length, 1);
 });
+
+test('linked subtasks: --add --domain creates the task, both close and reopen together, removal needs --yes', () => {
+  const { run, runAll, read } = setupWithDomains();
+  run('task', 'add', 'Trip', '--domain', 'sport');
+  run('task', 'sub', 'trip', '--add', 'Book flights', '--domain', 'studies');
+  const saved = () => read('a', 'tasks.json').tasks;
+  const [trip, flights] = saved();
+  assert.equal(flights.title, 'Book flights');
+  assert.equal(flights.domain, 'studies');
+  assert.equal(trip.subtasks[0].task, flights.id);
+  assert.match(run('task', 'show', 'trip'), /\[ \] Book flights \(s_\w+\) → task t_\w+/);
+
+  run('task', 'sub', 'trip', 'flights');
+  assert.deepEqual(saved().map((/** @type {any} */ t) => t.status), ['open', 'done']);
+  assert.equal(saved()[0].subtasks[0].done, true);
+  run('task', 'sub', 'trip', 'flights', '--undo');
+  assert.deepEqual(saved().map((/** @type {any} */ t) => t.status), ['open', 'open']);
+  run('task', 'done', 'Book flights');
+  assert.equal(saved()[0].subtasks[0].done, true);
+
+  // A chat on the subtask is stored in the task that is the same thing.
+  run('task', 'link', 'trip', 'local_1', '--title', 'Flights', '--subtask', 'flights');
+  assert.equal(saved()[0].sessions, undefined);
+  assert.equal(saved()[1].sessions[0].id, 'local_1');
+
+  run('task', 'undo', 'Book flights');
+  assert.match(runAll('task', 'sub', 'trip', '--remove', 'flights').stderr, /drops that task as well.*--yes/);
+  run('task', 'sub', 'trip', '--remove', 'flights', '--yes');
+  assert.deepEqual(saved().map((/** @type {any} */ t) => [t.title, t.status, t.subtasks.length]), [['Trip', 'open', 0], ['Book flights', 'dropped', 0]]);
+
+  // An existing task can be linked later, and unlinked with "none".
+  run('task', 'add', 'Passport', '--domain', 'sport');
+  run('task', 'sub', 'trip', '--add', 'Passport check');
+  run('task', 'sub', 'trip', '--link', 'passport', '--task', 'Passport');
+  assert.ok(saved()[0].subtasks[0].task);
+  assert.match(runAll('task', 'sub', 'trip', '--link', 'passport').stderr, /--link needs --task/);
+  run('task', 'sub', 'trip', '--link', 'passport', '--task', 'none');
+  assert.equal(saved()[0].subtasks[0].task, undefined);
+  run('task', 'sub', 'trip', '--link', 'passport', '--task', 'Passport');
+  run('task', 'delete', 'Passport', '--yes');
+  assert.equal(saved()[0].subtasks.length, 0);
+});
