@@ -98,6 +98,13 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   task creates the next occurrence as a new task (the closed one keeps its id in `next`). The next date counts
   from the due date, or from today when the task was late, so a late completion does not pile up overdue copies.
 - `ongoing`: path of a text file with the state of work in progress; "today" lists these tasks even without a date.
+- `sessions` (omitted when empty): the chat sessions working on the task,
+  `[{ "id": "…", "title": "…", "parent": null, "subtask": "s_…", "addedAt": "…" }]`. `id` is whatever identifies the
+  session in the assistant that runs it; `title` is a copy for display; `parent` is the chat that opened this one
+  (`null`: opened from the task itself), which makes a tree ordered by `addedAt`; `subtask` ties a chat to one
+  subtask and its sub-chats inherit it. A chat belongs to one task. Compass only stores the links (the CLI and the
+  task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Unlinking a
+  chat moves its sub-chats up one level, and a repeating task's next occurrence starts with none.
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 
 ### Habits (`habits.json`)
@@ -204,6 +211,9 @@ compass task add "Water plants" --domain home --repeat "every 3 days"
 printf '%s\n' '"Pay the fee" --due +3' '"Book a room" --domain home' \
   | compass task add --stdin --domain studies   # several tasks, one commit; options here apply to every line
 compass task done "problem set"       # a task by id or part of its title
+compass task link "report" SESSION --title "Draft" [--parent SESSION] [--subtask outline]   # record a chat on a task
+compass task chats "report"           # its chats as a tree (--prune a,b forgets the ones listed; unlink does the same)
+compass task brief "report"           # starter text for a new chat: title, notes, subtasks, date, chats
 compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none
 compass tasks --due week              # also: --domain D, --cwd PATH, --due today|overdue, --all
 compass today --cwd "$PWD"            # what matters in the domain of this folder

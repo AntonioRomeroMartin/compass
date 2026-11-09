@@ -304,3 +304,53 @@ test('closed tasks older than 30 days move to the archive of their year on the n
   assert.match(run('tasks', '--archived'), /Old exam/);
   assert.doesNotMatch(run('tasks', '--all'), /Old exam/);
 });
+
+test('chats: link, tree, subtasks, move, unlink and prune', () => {
+  const { run, runAll, read } = setupWithDomains();
+  run('task', 'add', 'Write report', '--domain', 'sport');
+  run('task', 'add', 'Plan trip', '--domain', 'sport');
+  run('task', 'sub', 'report', '--add', 'Outline');
+  run('task', 'sub', 'report', '--add', 'Charts');
+  const saved = () => read('a', 'tasks.json').tasks;
+
+  assert.match(run('task', 'chats', 'report'), /No chats linked/);
+  assert.match(run('task', 'link', 'report', 'local_1', '--title', 'Main chat'), /^tasks: chats “Write report”\n.*chats 1/);
+  run('task', 'link', 'report', 'local_2', '--title', 'Outline chat', '--parent', 'local_1', '--subtask', 'outline');
+  run('task', 'link', 'report', 'local_3', '--title', 'Deeper', '--parent', 'local_2');
+  assert.deepEqual(saved()[0].sessions.map((/** @type {any} */ c) => [c.id, c.parent, c.subtask ? 'sub' : '-']), [['local_1', null, '-'], ['local_2', 'local_1', 'sub'], ['local_3', 'local_2', '-']]);
+  assert.equal(saved()[1].sessions, undefined);
+  assert.equal(run('task', 'chats', 'report'), [
+    '- Main chat [local_1]', '  - Outline chat [local_2] — subtask: Outline', '    - Deeper [local_3] — subtask: Outline',
+  ].join('\n') + '\n');
+
+  // Mistakes are refused and nothing is written.
+  assert.match(runAll('task', 'link', 'report', 'local_9', '--parent', 'local_x').stderr, /not a chat of this task/);
+  assert.match(runAll('task', 'link', 'report', 'local_9', '--subtask', 'nothing').stderr, /no subtask .* matches/);
+  assert.match(runAll('task', 'link', 'report').stderr, /which chat session/);
+  assert.match(runAll('task', 'chats', 'report', '--prune').stderr, /needs session ids/);
+  // Already linked elsewhere: ignored, unless --move.
+  assert.match(run('task', 'link', 'trip', 'local_1'), /^No change/);
+  run('task', 'link', 'trip', 'local_1', '--title', 'Main chat', '--move');
+  assert.deepEqual(saved().map((/** @type {any} */ t) => (t.sessions ?? []).map((/** @type {any} */ c) => c.id)), [['local_2', 'local_3'], ['local_1']]);
+  assert.deepEqual(saved()[0].sessions.map((/** @type {any} */ c) => c.parent), [null, 'local_2']);
+
+  assert.match(run('task', 'show', 'report'), /chats:\n {2}- Outline chat/);
+  run('task', 'chats', 'report', '--prune', 'local_2,local_nope');
+  assert.deepEqual(saved()[0].sessions.map((/** @type {any} */ c) => [c.id, c.parent]), [['local_3', null]]);
+  run('task', 'unlink', 'report', 'local_3');
+  assert.equal(saved()[0].sessions, undefined);
+});
+
+test('chats: closing a task leaves its chats for the agent to clean up; brief gives the starter text', () => {
+  const { run, read } = setupWithDomains();
+  run('task', 'add', 'Write report', '--domain', 'sport', '--due', '2026-12-01', '--notes', 'Two pages.\nFor the course.', '--ongoing', 'ongoing/report.md');
+  run('task', 'sub', 'report', '--add', 'Outline');
+  run('task', 'link', 'report', 'local_1', '--title', 'Main chat');
+  const text = run('task', 'brief', 'report');
+  assert.match(text, /^Task: Write report \[t_\w+\]\nDomain: sport · due 2026-12-01 /);
+  assert.match(text, /Work in progress: ongoing\/report\.md\nNotes:\n {2}Two pages\.\n {2}For the course\.\nSubtasks:\n {2}\[ \] Outline \[s_\w+\]\nChats already on it:\n {2}- Main chat \[local_1\]\n?$/);
+  run('task', 'done', 'report');
+  // Still listed after closing: `chats` finds closed tasks too.
+  assert.match(run('task', 'chats', 'report'), /Main chat \[local_1\]/);
+  assert.equal(read('a', 'tasks.json').tasks[0].sessions.length, 1);
+});

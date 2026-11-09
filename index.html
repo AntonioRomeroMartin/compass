@@ -134,6 +134,11 @@
           <label>Location
             <input name="location" maxlength="120" autocomplete="off" placeholder="library, gym, online…">
           </label>
+          <fieldset id="task-chats" class="subgoals" hidden>
+            <legend>Chats</legend>
+            <ul id="task-chat-list" class="chat-tree"></ul>
+            <p class="hint">Linked by the assistant; read-only here.</p>
+          </fieldset>
         </div>
       </details>
       <p id="task-msg" class="msg" role="status" aria-live="polite"></p>

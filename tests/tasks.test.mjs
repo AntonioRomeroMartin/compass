@@ -325,3 +325,87 @@ test('domains: chat scope and root folder', () => {
   assert.equal(cleared.root, undefined);
   assert.equal(domains.commitMessage([{ type: 'setRoot', path: '/x' }]), 'domains: root folder');
 });
+
+// ---- Linked chats ----
+
+/** @param {string} id @param {string|null} parent @param {string} at @param {string} [subtask] */
+const chat = (id, parent, at, subtask) => ({ id, title: `Chat ${id}`, parent, addedAt: `2026-11-0${at}T10:00:00Z`, ...(subtask ? { subtask } : {}) });
+const sub = (/** @type {string} */ id) => ({ id, title: `Sub ${id}`, done: false });
+
+test('chats: link keeps one owner, relink moves, unlink lifts the children', () => {
+  let doc = tasks.emptyDoc();
+  doc = tasks.applyOps(doc, [
+    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b') },
+    { type: 'link', id: 't_a', chat: chat('c1', null, '1') },
+    { type: 'link', id: 't_a', chat: chat('c2', 'c1', '2') },
+    { type: 'link', id: 't_a', chat: chat('c3', 'c2', '3') },
+    { type: 'link', id: 't_b', chat: chat('c1', null, '4') }, // already in t_a: ignored
+    { type: 'link', id: 't_a', chat: chat('c1', null, '5') }, // repeated: ignored
+    { type: 'link', id: 't_a', chat: chat('c4', 'nope', '4') }, // unknown parent → root
+  ]);
+  const a = () => /** @type {any} */ (doc.tasks.find((t) => t.id === 't_a'));
+  assert.deepEqual(a().sessions.map((/** @type {any} */ c) => [c.id, c.parent]), [['c1', null], ['c2', 'c1'], ['c3', 'c2'], ['c4', null]]);
+  assert.equal(doc.tasks[1].sessions, undefined);
+  assert.deepEqual(tasks.chatTree(a()).map((n) => [n.chat.id, n.children.map((/** @type {any} */ c) => c.chat.id)]), [['c1', ['c2']], ['c4', []]]);
+
+  // Unlinking the middle chat hands its child to the grandparent; unlinking an unknown id does nothing.
+  doc = tasks.applyOps(doc, [{ type: 'unlink', id: 't_a', sessions: ['c2', 'zzz'] }]);
+  assert.deepEqual(a().sessions.map((/** @type {any} */ c) => [c.id, c.parent]), [['c1', null], ['c3', 'c1'], ['c4', null]]);
+
+  // Relink moves a chat to another task (it leaves the first one, children lifted).
+  doc = tasks.applyOps(doc, [{ type: 'relink', id: 't_b', chat: chat('c1', null, '1') }]);
+  assert.deepEqual(a().sessions.map((/** @type {any} */ c) => [c.id, c.parent]), [['c3', null], ['c4', null]]);
+  assert.deepEqual(doc.tasks[1].sessions?.map((c) => c.id), ['c1']);
+
+  doc = tasks.applyOps(doc, [{ type: 'unlink', id: 't_b', sessions: ['c1'] }]);
+  assert.ok(!('sessions' in doc.tasks[1]), 'an empty list is omitted');
+});
+
+test('chats: subtask inheritance, removing a subtask, and the chats of a subtask', () => {
+  let doc = tasks.emptyDoc();
+  doc = tasks.applyOps(doc, [
+    { type: 'add', task: task('t_a') },
+    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'addSub', id: 't_a', sub: sub('s_2') },
+    { type: 'link', id: 't_a', chat: chat('c1', null, '1') },
+    { type: 'link', id: 't_a', chat: chat('c2', 'c1', '2', 's_1') },
+    { type: 'link', id: 't_a', chat: chat('c3', 'c2', '3') }, // inherits s_1
+    { type: 'link', id: 't_a', chat: chat('c4', 'c2', '4', 's_2') }, // its own
+    { type: 'link', id: 't_a', chat: chat('c5', null, '5', 's_gone') }, // unknown subtask: dropped
+  ]);
+  const t = () => doc.tasks[0];
+  assert.equal(tasks.chatSubtask(t(), 'c1'), undefined);
+  assert.equal(tasks.chatSubtask(t(), 'c3'), 's_1');
+  assert.equal(tasks.chatSubtask(t(), 'c4'), 's_2');
+  assert.equal(tasks.chatSubtask(t(), 'c5'), undefined);
+  assert.deepEqual(tasks.chatsOfSubtask(t(), 's_1').map((c) => c.id), ['c2', 'c3']);
+  doc = tasks.applyOps(doc, [{ type: 'removeSub', id: 't_a', subId: 's_1' }]);
+  assert.equal(tasks.chatSubtask(t(), 'c3'), undefined);
+});
+
+test('chats: normalize repairs a damaged list and applyOps ignores a missing task', () => {
+  const doc = tasks.normalize({ tasks: [{ id: 't_a', title: 'A', sessions: [
+    { id: 'c1', title: 'One', parent: 'c1', addedAt: 'x' }, // own parent → root
+    { id: 'c1', title: 'Repeated' },
+    { id: 'c2', parent: 'missing', subtask: 5 },
+    { id: 'c3', parent: 'c2', subtask: 's_1', addedAt: 'y' },
+    null, { title: 'no id' },
+  ] }, { id: 't_b', title: 'B', sessions: [] }] });
+  assert.deepEqual(doc.tasks[0].sessions, [
+    { id: 'c1', title: 'One', parent: null, addedAt: 'x' },
+    { id: 'c2', title: '', parent: null, addedAt: '' },
+    { id: 'c3', title: '', parent: 'c2', subtask: 's_1', addedAt: 'y' },
+  ]);
+  assert.ok(!('sessions' in doc.tasks[1]));
+  assert.deepEqual(tasks.applyOps(doc, [{ type: 'link', id: 'nope', chat: chat('c9', null, '1') }]), doc);
+});
+
+test('chats: closing a task or an occurrence does not touch its chats; commit message names the task', () => {
+  const t = task('t_a', { repeat: { type: 'days', every: 1 }, due: FRI });
+  const base = tasks.applyOps(tasks.emptyDoc(), [{ type: 'add', task: t }, { type: 'link', id: 't_a', chat: chat('c1', null, '1') }]);
+  const ops = /** @type {import('../lib/tasks.js').Op[]} */ ([{ type: 'done', id: 't_a', at: '2026-11-05T00:00:00Z', today: FRI, nextId: 't_n' }]);
+  const after = tasks.applyOps(base, ops);
+  assert.equal(after.tasks[0].sessions?.length, 1);
+  assert.ok(!after.tasks[1].sessions, 'the next occurrence starts without chats');
+  const link = /** @type {import('../lib/tasks.js').Op[]} */ ([{ type: 'unlink', id: 't_a', sessions: ['c1'] }]);
+  assert.equal(tasks.commitMessage(link, base, after), 'tasks: chats “Task t_a”');
+});

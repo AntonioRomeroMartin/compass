@@ -82,6 +82,14 @@ Usage:
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T] [--location T] [--event E]   (none clears a field)
   compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask>
+  compass task link <task> <session> [--title T] [--parent <session>] [--subtask <subtask>] [--move]
+                                        record a chat session working on the task (--parent: the chat that
+                                        opened it; --subtask: the subtask it is about, inherited by its
+                                        sub-chats; --move: take it from another task)
+  compass task unlink <task> <session>…  forget chats (their sub-chats move up one level)
+  compass task chats <task> [--prune <session>[,…]]
+                                        the task's chats as a tree; --prune forgets the ones listed
+  compass task brief <task>             starter text for a new chat on the task: title, notes, subtasks, date, chats
   compass events [--domain D | --cwd PATH] [--past]
                                         from today on (--past: the ones already over too)
   compass event add "title" (--domain D | --cwd PATH) --date DATE [--time HH:MM[-HH:MM]] [--until DATE]
@@ -312,6 +320,7 @@ function taskLine(t, ctx, opts = {}) {
   if (opts.domain !== false) bits.push(t.domain);
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
   if (t.subtasks.length) bits.push(`sub ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`);
+  if (t.sessions?.length) bits.push(`chats ${t.sessions.length}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
   if (t.event) bits.push(`for ${ctx.events.events.find((e) => e.id === t.event)?.title ?? t.event}`);
   if (t.location) bits.push(`@ ${t.location}`);
@@ -728,6 +737,33 @@ function task(ctx, sub, rest, flags) {
         });
         break;
       }
+      case 'link': {
+        const session = rest[1] ?? fail('which chat session? compass task link <task> <session>');
+        const parent = str(flags.parent);
+        const subRef = str(flags.subtask);
+        const title = str(flags.title) ?? '';
+        build = (fresh) => {
+          const cur = live(fresh);
+          if (parent && !cur.sessions?.some((c) => c.id === parent)) fail(`“${parent}” is not a chat of this task (link it first)`);
+          const subId = subRef === undefined ? undefined : subtaskRef(cur, subRef).id;
+          const chat = { id: session, title, parent: parent ?? null, ...(subId ? { subtask: subId } : {}), addedAt: at };
+          return { tasks: [{ type: flags.move ? 'relink' : 'link', id: tid, chat }] };
+        };
+        break;
+      }
+      case 'unlink':
+        if (rest.length < 2) fail('which chat sessions? compass task unlink <task> <session>…');
+        build = () => ({ tasks: [{ type: 'unlink', id: tid, sessions: rest.slice(1) }] });
+        break;
+      case 'chats': {
+        const gone = (str(flags.prune) ?? '').split(/[\s,]+/).filter(Boolean);
+        if (flags.prune === true || (str(flags.prune) !== undefined && !gone.length)) fail('--prune needs session ids: --prune a,b');
+        if (!gone.length) return showChats(t);
+        build = () => ({ tasks: [{ type: 'unlink', id: tid, sessions: gone }] });
+        break;
+      }
+      case 'brief':
+        return brief(t, ctx);
       default:
         return fail(`unknown task action “${sub}” (compass help)`);
     }
@@ -748,6 +784,59 @@ function task(ctx, sub, rest, flags) {
 }
 
 /**
+ * A subtask of a task by id or part of its title.
+ * @param {Task} t @param {string} ref
+ */
+function subtaskRef(t, ref) {
+  const q = ref.toLowerCase();
+  const exact = t.subtasks.filter((s) => s.id === ref);
+  const matches = exact.length ? exact : t.subtasks.filter((s) => q && s.title.toLowerCase().includes(q));
+  if (matches.length !== 1) fail(matches.length ? `“${ref}” matches several subtasks` : `no subtask of this task matches “${ref}”`);
+  return matches[0];
+}
+
+/**
+ * The chats of a task as an indented tree (nothing printed if it has none).
+ * @param {Task} t @param {string} [indent]
+ */
+function chatLines(t, indent = '') {
+  /** @type {string[]} */
+  const lines = [];
+  /** @param {ReturnType<typeof tasks.chatTree>} nodes @param {number} depth */
+  const walk = (nodes, depth) => {
+    for (const { chat, children } of nodes) {
+      const subId = tasks.chatSubtask(t, chat.id);
+      const subTitle = subId ? t.subtasks.find((s) => s.id === subId)?.title : undefined;
+      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]${subTitle ? ` — subtask: ${subTitle}` : ''}`);
+      walk(children, depth + 1);
+    }
+  };
+  walk(tasks.chatTree(t), 0);
+  return lines;
+}
+
+/** @param {Task} t */
+function showChats(t) {
+  const lines = chatLines(t);
+  console.log(lines.length ? lines.join('\n') : `No chats linked to “${t.title}”.`);
+}
+
+/**
+ * Starter text for a chat about a task. Plain text: the caller adds its own instructions.
+ * @param {Task} t @param {Ctx} ctx
+ */
+function brief(t, ctx) {
+  const out = [`Task: ${t.title} [${t.id}]`, `Domain: ${t.domain}${t.due ? ` · due ${t.due} (${relDays(daysUntil(t.due, ctx.today, 'UTC'))})` : ''}${t.status !== 'open' ? ` · ${t.status}` : ''}`];
+  if (t.location) out.push(`Where: ${t.location}`);
+  if (t.ongoing) out.push(`Work in progress: ${t.ongoing}`);
+  if (t.notes) out.push('Notes:', ...t.notes.split('\n').map((l) => `  ${l}`));
+  if (t.subtasks.length) out.push('Subtasks:', ...t.subtasks.map((s) => `  ${s.done ? '[x]' : '[ ]'} ${s.title} [${s.id}]`));
+  const chats = chatLines(t, '  ');
+  if (chats.length) out.push('Chats already on it:', ...chats);
+  console.log(out.join('\n'));
+}
+
+/**
  * @param {TasksDoc} doc
  * @returns {never}
  */
@@ -761,6 +850,8 @@ function showTask(t, ctx) {
   console.log(taskLine(t, ctx));
   for (const s of t.subtasks) console.log(`  ${s.done ? '[x]' : '[ ]'} ${s.title} (${s.id})`);
   if (t.notes) console.log(t.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
+  const chats = chatLines(t, '  ');
+  if (chats.length) console.log(['  chats:', ...chats].join('\n'));
 }
 
 /**
