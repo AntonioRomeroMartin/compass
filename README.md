@@ -106,9 +106,14 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Unlinking a
   chat moves its sub-chats up one level, and a repeating task's next occurrence starts with none.
 - A subtask may carry `task`: the id of another task (same domain or another) that it is the same thing as.
-  Completing or reopening either one does the same to the other; dropping or deleting the task removes the
-  subtask; the chats of the subtask live in that task. The CLI (`task sub … --task|--domain|--link`) also closes,
-  reopens and drops the other side when a subtask is changed; confirming first is up to the caller.
+  That task holds the state and the chats of the subtask; the subtask's `done` is a copy that `applyOps` keeps
+  equal to it, so no client can leave them out of step. Completing or reopening either one does the same to the
+  other (`toggleSub` with `at`, `today`, `nextId`); removing the subtask with `at` drops the task (without: the
+  task lives on), and deleting the task removes the subtask. A dropped task keeps its place as a subtask, shown as
+  dropped and left out of the count, so reopening it restores it. Dropping a task also drops the open tasks its
+  subtasks are, unless another open task has them too; reopening it brings back exactly those. Completing a task
+  takes nothing with it. The next occurrence of a repeating task gets plain subtasks. Confirming first is up to the
+  caller (the CLI asks for `--yes`, the task sheet asks).
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 
 ### Habits (`habits.json`)
