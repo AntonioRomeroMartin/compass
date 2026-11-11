@@ -67,7 +67,8 @@ Usage:
                                         With a domain: in full (also tasks dated later and without a date, every
                                         active goal); its sub-domains with paths, agenda only (not its
                                         parents); from the root folder, every other domain too
-                                        of the day and week, deadlines within 7 days, ongoing work
+                                        of the day and week, deadlines within 7 days, ongoing work; last,
+                                        closed tasks that still have chats linked
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
   compass task add "title" (--domain D | --cwd PATH | --parent <task>) [--due DATE] [--repeat RULE]
@@ -540,6 +541,10 @@ function today(ctx, flags) {
     if (g.undated.length) console.log('  No date');
     for (const t of g.undated) console.log(taskLines(t, ctx, { domain: false }, '  ').join('\n'));
   }
+  if (view.closedWithChats.length) {
+    console.log('Closed tasks with chats (delete those chats, then: compass task chats <task> --prune …)');
+    for (const t of view.closedWithChats) console.log(`  ${taskLine(t, ctx)}`);
+  }
 }
 
 /** Every task in the yearly archives (tasks-YYYY.json next to tasks.json), oldest year first. @param {Ctx} ctx */
@@ -771,6 +776,7 @@ function task(ctx, sub, rest, flags) {
         const title = str(flags.title) ?? '';
         build = (fresh) => {
           const cur = live(fresh);
+          if (cur.status !== 'open') fail(`“${cur.title}” is ${cur.status}: chats go on open tasks (reopen it first: compass task undo)`);
           if (parent && !cur.sessions?.some((c) => c.id === parent)) fail(`“${parent}” is not a chat of this task (link it first)`);
           const chat = { id: session, title, parent: parent ?? null, addedAt: at };
           return { tasks: [{ type: flags.move ? 'relink' : 'link', id: tid, chat }] };
