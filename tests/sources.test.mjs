@@ -17,21 +17,22 @@ test('a status change sets the dates', () => {
   assert.deepEqual([doc.sources[0].started, doc.sources[0].finished], ['2026-03-02', '2026-03-20']);
   assert.equal(sources.doneIn(doc, '2026').length, 1);
   assert.equal(sources.doneIn(doc, '2025').length, 0);
-  doc = sources.applyOps(doc, [{ type: 'status', id: s.id, status: 'skip', today: '2026-03-21' }]);
-  assert.deepEqual([doc.sources[0].started, doc.sources[0].finished], [null, null]);
+  doc = sources.applyOps(doc, [{ type: 'status', id: s.id, status: null, today: '2026-03-21' }]);
+  assert.deepEqual([doc.sources[0].status, doc.sources[0].started, doc.sources[0].finished], [null, null, null]);
 });
 
 test('commit messages name the kind of what is added', () => {
   const s = sources.newSource({ title: 'A talk', kind: 'video', url: 'https://example.com/v' }, NOW);
   const doc = sources.applyOps(sources.emptyDoc(), [{ type: 'add', source: s }]);
   assert.equal(sources.commitMessage([{ type: 'add', source: s }], doc, doc), 'sources: new video “A talk”');
-  assert.equal(sources.commitMessage([{ type: 'status', id: s.id, status: 'skip', today: '2026-03-02' }], doc, doc), 'sources: “A talk” skip');
+  assert.equal(sources.commitMessage([{ type: 'status', id: s.id, status: null, today: '2026-03-02' }], doc, doc), 'sources: “A talk” none');
 });
 
 test('the words of a status depend on the kind', () => {
   assert.equal(sources.statusText({ kind: 'book', status: 'doing' }), 'Reading');
   assert.equal(sources.statusText({ kind: 'video', status: 'done' }), 'Watched');
-  assert.equal(sources.statusText({ kind: 'podcast', status: 'want' }), 'Want to listen');
+  assert.equal(sources.statusText({ kind: 'podcast', status: 'pending' }), 'Want to listen');
+  assert.equal(sources.statusText({ kind: 'book', status: null }), 'Material only');
   assert.equal(sources.statusText({ kind: 'course', status: 'done' }), 'Completed');
 });
 
@@ -52,7 +53,7 @@ test('normalize fills missing fields and drops bad values', () => {
   ] });
   assert.equal(doc.sources.length, 1);
   const [s] = doc.sources;
-  assert.deepEqual([s.kind, s.status, s.rating, s.cover, s.author, s.url, s.file, s.domain], ['book', 'want', null, 123, null, null, null, null]);
+  assert.deepEqual([s.kind, s.status, s.rating, s.cover, s.author, s.url, s.file, s.domain], ['book', 'pending', null, 123, null, null, null, null]);
   assert.deepEqual(s.quotes, [{ id: 'r', text: 'ok', page: null }]);
 });
 
@@ -62,16 +63,36 @@ test('a books.json from before is read as books, keeping every field', () => {
   const doc = sources.normalize({ version: 1, timeZone: 'UTC', books: [book, { ...book, id: 'b2', status: 'read', finished: '2026-02-01' }, { ...book, id: 'b3', status: 'dropped' }, { ...book, id: 'b4', status: 'want' }] });
   assert.ok(!('books' in doc));
   assert.equal(doc.timeZone, 'UTC');
-  assert.deepEqual(doc.sources.map((s) => [s.id, s.kind, s.status]), [['b1', 'book', 'doing'], ['b2', 'book', 'done'], ['b3', 'book', 'dropped'], ['b4', 'book', 'want']]);
+  assert.deepEqual(doc.sources.map((s) => [s.id, s.kind, s.status]), [['b1', 'book', 'doing'], ['b2', 'book', 'done'], ['b3', 'book', 'done'], ['b4', 'book', 'pending']]);
   const { pages: _p, status: _s, ...rest } = book;
   assert.deepEqual(doc.sources[0], { ...rest, kind: 'book', url: null, file: null, status: 'doing' });
+});
+
+test('the earlier statuses are read as the three states, keeping the dates', () => {
+  const raw = { version: 1, sources: [
+    { id: 'a', title: 'A', status: 'want' },
+    { id: 'b', title: 'B', status: 'dropped', started: '2026-01-02', finished: '2026-02-03' },
+    { id: 'c', title: 'C', status: 'skip' },
+    { id: 'd', title: 'D', status: 'doing', started: '2026-01-02' },
+    { id: 'e', title: 'E', status: null },
+  ] };
+  assert.ok(sources.hasOldStatuses(raw));
+  const doc = sources.normalize(raw);
+  assert.deepEqual(doc.sources.map((s) => s.status), ['pending', 'done', null, 'doing', null]);
+  assert.deepEqual([doc.sources[1].started, doc.sources[1].finished], ['2026-01-02', '2026-02-03']);
+  assert.ok(!sources.hasOldStatuses(JSON.parse(sources.serialize(doc))));
+  // Material only goes last, after the three states.
+  assert.deepEqual([...doc.sources].sort(sources.byStatus).map((s) => s.id), ['d', 'a', 'b', 'c', 'e']);
 });
 
 test('parsing kinds and statuses, and the Open Library results', () => {
   assert.equal(sources.parseKind('Videos'), 'video');
   assert.equal(sources.parseStatus('Watched'), 'done');
   assert.equal(sources.parseStatus('reading'), 'doing');
-  assert.equal(sources.parseStatus('not for me'), 'skip');
+  assert.equal(sources.parseStatus('not for me'), null);
+  assert.equal(sources.parseStatus('none'), null);
+  assert.equal(sources.parseStatus('want'), 'pending');
+  assert.equal(sources.parseStatus('dropped'), 'done');
   assert.throws(() => sources.parseStatus('soon'), /unknown status/);
   assert.throws(() => sources.parseKind('zine'), /unknown kind/);
   const found = sources.parseSearch({ docs: [

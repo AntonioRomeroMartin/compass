@@ -55,20 +55,20 @@ write('tasks.json', tasks.serialize(tasks.applyOps(tasks.emptyDoc(TZ), [
 ])));
 
 // ---- sources: one of each kind, in several states
-/** @type {[Partial<sources.Source> & { title: string }, sources.Status, number][]} fields, status, days since it changed */
+/** @type {[Partial<sources.Source> & { title: string }, sources.Status|null, number][]} fields, status (null: material only), days since it changed */
 const SRC = [
   [{ title: 'Designing Data Systems', author: 'A. Writer', domain: 'work' }, 'doing', 12],
   [{ title: 'Position sizing explained', kind: 'video', author: 'Some Channel', url: 'https://example.com/video', file: 'sizing-transcript.txt', domain: 'money/trading' }, 'done', 20],
-  [{ title: 'Intro to Statistics', kind: 'course', author: 'Open School', url: 'https://example.com/course', domain: 'work' }, 'want', 5],
-  [{ title: 'Why index funds', kind: 'article', author: 'A Blog', url: 'https://example.com/post', domain: 'money' }, 'skip', 2],
+  [{ title: 'Intro to Statistics', kind: 'course', author: 'Open School', url: 'https://example.com/course', domain: 'work' }, 'pending', 5],
+  [{ title: 'Why index funds', kind: 'article', author: 'A Blog', url: 'https://example.com/post', domain: 'money' }, null, 2],
   [{ title: 'Markets Weekly', kind: 'podcast', author: 'Two Hosts', domain: 'money' }, 'doing', 3],
   [{ title: 'A Long Novel', author: 'Old Author' }, 'done', 400],
-  [{ title: 'Unfinished Essays', author: 'Someone' }, 'dropped', 90],
+  [{ title: 'Unfinished Essays', author: 'Someone', url: 'paper book, shelf' }, 'done', 90],
 ];
 write('sources.json', sources.serialize(sources.applyOps(sources.emptyDoc(TZ), SRC.map(([fields, status, back], i) => {
   const s = sources.newSource({ ...fields, id: `s_demo${i}` }, day(back + 30));
-  const started = status === 'doing' || status === 'done' || status === 'dropped' ? date(back + 10) : null;
-  return /** @type {sources.Op} */ ({ type: 'add', source: { ...s, status, started, finished: status === 'done' || status === 'dropped' ? date(back) : null, rating: status === 'done' ? 4 : null } });
+  const started = status === 'doing' || status === 'done' ? date(back + 10) : null;
+  return /** @type {sources.Op} */ ({ type: 'add', source: { ...s, status, started, finished: status === 'done' ? date(back) : null, rating: status === 'done' ? 4 : null } });
 }))));
 
 // ---- trades: about 45 over the last 6 months, two open, the last two today (losses: the day limit is hit)

@@ -117,17 +117,20 @@ Usage:
   compass habit archive|unarchive <habit>
   compass habit delete <habit> --yes    for good, with its history (archive keeps it)
   compass sources [--domain D | --cwd PATH] [--kind K] [--status S]
-                                        K: book, video, course, article, podcast; S: want, doing, done,
-                                        dropped, skip (not for me: kept only as material)
-  compass sources migrate               books.json → sources.json, once (every book keeps its data)
+                                        K: book, video, course, article, podcast; S: pending, doing, done,
+                                        none (no status: material only, not meant to be consumed)
+  compass sources migrate               books.json → sources.json, and the earlier statuses (want, dropped,
+                                        skip) → the three states; every source keeps its data and dates
   compass source find "text"            search Open Library (books)
   compass source add "title" [--kind K] [--domain D | --cwd PATH] [--author A] [--url U] [--file F]
                    [--status S] [--find]
-                                        no domain: general; --file: path inside the domain folder's sources/;
+                                        no domain: general; --url: where to find it, a link or free text
+                                        ("paper book, shelf"); --file: local copy, a path inside the domain
+                                        folder's knowledge/sources/;
                                         --find: author and cover from the first Open Library match (books)
-  compass source want|doing|done|dropped|skip <source>
+  compass source pending|doing|done|none <source>
                                         also the words of each kind (reading, watched, listening…); sets the
-                                        dates: started on doing, finished on done/dropped
+                                        dates: started on doing, finished on done (none: material only)
   compass source rate <source> 1-5|none
   compass source quote <source> "text" [--page N] | --remove <quote>
   compass source edit <source> [--title T] [--kind K] [--author A] [--url U] [--file F] [--domain D|none]
@@ -1115,7 +1118,7 @@ function habit(ctx, sub, rest, flags) {
  * @param {Source} s @param {{ domain?: boolean }} [opts]
  */
 function sourceLine(s, opts = {}) {
-  const mark = { doing: '▸', want: '·', done: '✓', dropped: '✗', skip: '–' }[s.status];
+  const mark = s.status ? { doing: '▸', pending: '·', done: '✓' }[s.status] : '–';
   const bits = [s.kind, sources.statusText(s).toLowerCase()];
   if (s.author) bits.push(s.author);
   if (s.rating) bits.push('★'.repeat(s.rating));
@@ -1141,16 +1144,18 @@ function findSource(doc, ref) {
 /** @param {Ctx} ctx @param {Record<string, string | true>} flags */
 function listSources(ctx, flags) {
   if (needsMigration(ctx)) console.error('note: there is a books.json and no sources.json yet: run compass sources migrate');
+  else if (sources.hasOldStatuses(readJsonIfExists(ctx.cfg, ctx.cfg.sources))) console.error('note: sources.json still has the earlier statuses: run compass sources migrate');
   const scope = scopeFrom(ctx, flags);
   if (scope.note && !scope.id) console.error(`note: ${scope.note}; listing every domain`);
   const own = scope.id ? domains.scope(ctx.domains, scope.id).own : null;
   /** @template T @param {string} name @param {(text: string) => T} parse @returns {T | null} */
   const filter = (name, parse) => (str(flags[name]) ? attempt(() => parse(/** @type {string} */ (str(flags[name])))) : null);
   const kind = filter('kind', sources.parseKind);
-  const status = filter('status', sources.parseStatus);
+  // `none` is a status too (material only): undefined means no filter.
+  const status = str(flags.status) ? attempt(() => sources.parseStatus(/** @type {string} */ (str(flags.status)))) : undefined;
   const list = ctx.sources.sources
     .filter((s) => (!own || (s.domain && own.has(domains.canonical(ctx.domains, s.domain))))
-      && (!kind || s.kind === kind) && (!status || s.status === status))
+      && (!kind || s.kind === kind) && (status === undefined || s.status === status))
     .sort(sources.byStatus);
   if (!list.length) console.log('No sources.');
   for (const s of list) console.log(sourceLine(s));
@@ -1159,8 +1164,8 @@ function listSources(ctx, flags) {
 /** @param {Source} s */
 function showSource(s) {
   console.log(sourceLine(s));
-  if (s.url) console.log(`  Link: ${s.url}`);
-  if (s.file) console.log(`  File: sources/${s.file}`);
+  if (s.url) console.log(`  Location: ${s.url}`);
+  if (s.file) console.log(`  Copy: knowledge/sources/${s.file}`);
   if (s.olid || s.cover) console.log(`  Open Library: ${[s.olid && `${sources.OPEN_LIBRARY}/works/${s.olid}`, s.cover && sources.coverUrl(s.cover)].filter(Boolean).join(' · ')}`);
   if (s.notes) console.log(s.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
   for (const q of s.quotes) console.log(`  “${q.text}”${q.page ? ` (p. ${q.page})` : ''} [${q.id}]`);
@@ -1169,15 +1174,24 @@ function showSource(s) {
 /** A books.json from before sources, and no sources.json yet. @param {Ctx} ctx */
 const needsMigration = (ctx) => !ctx.sources.sources.length && readJsonIfExists(ctx.cfg, ctx.cfg.sources) === null && readJsonIfExists(ctx.cfg, ctx.cfg.books) !== null;
 
-/** books.json → sources.json in one commit: every book keeps its data. @param {Ctx} ctx */
+/**
+ * books.json → sources.json, or sources.json with the earlier statuses → the three states, in one commit:
+ * every source keeps its data and dates.
+ * @param {Ctx} ctx
+ */
 function migrateSources(ctx) {
   const { sources: to, books: from } = ctx.cfg;
   const res = commitFiles(ctx.cfg, [to, from], (docs) => {
-    if (docs[to] !== null) fail(`${to} already exists: nothing to migrate`);
-    if (docs[from] === null) fail(`there is no ${from} to migrate`);
-    const doc = sources.normalize(docs[from]);
+    if (docs[to] === null) {
+      if (docs[from] === null) fail(`there is no ${from} to migrate`);
+      const doc = sources.normalize(docs[from]);
+      const n = doc.sources.length;
+      return { files: { [to]: sources.serialize(doc), [from]: null }, message: `sources: from ${from} (${n} book${n === 1 ? '' : 's'})` };
+    }
+    if (!sources.hasOldStatuses(docs[to])) fail(`${to} already has the current statuses: nothing to migrate`);
+    const doc = sources.normalize(docs[to]);
     const n = doc.sources.length;
-    return { files: { [to]: sources.serialize(doc), [from]: null }, message: `sources: from ${from} (${n} book${n === 1 ? '' : 's'})` };
+    return { files: { [to]: sources.serialize(doc) }, message: `sources: pending, doing, done or none (${n} source${n === 1 ? '' : 's'})` };
   }, { sync: ctx.sync });
   report(res, ctx.sync);
 }
@@ -1239,17 +1253,17 @@ async function source(ctx, sub, rest, flags) {
       }
     }
     let s = sources.newSource({ title, domain, ...fields }, ctx.now);
-    const status = str(flags.status) ? attempt(() => sources.parseStatus(/** @type {string} */ (str(flags.status)))) : 'want';
+    const status = str(flags.status) ? attempt(() => sources.parseStatus(/** @type {string} */ (str(flags.status)))) : 'pending';
     s = { ...s, ...sources.withStatus(s, status, ctx.today) };
     id = s.id;
     ops = [{ type: 'add', source: s }];
   } else {
     if (!sub) fail('which action? compass help');
-    // A status: want, doing, done, dropped, skip (or reading, watched…).
-    const status = SOURCE_ACTIONS.has(sub) ? null : attempt(() => sources.parseStatus(sub));
+    // A status: pending, doing, done, none (or reading, watched…). `none` is null, so undefined means "not a status".
+    const status = SOURCE_ACTIONS.has(sub) ? undefined : attempt(() => sources.parseStatus(sub));
     const s = findSource(ctx.sources, rest[0]);
     id = s.id;
-    if (status) ops = [{ type: 'status', id, status, today: ctx.today }];
+    if (status !== undefined) ops = [{ type: 'status', id, status, today: ctx.today }];
     else switch (sub) {
       case 'show':
         return showSource(s);
