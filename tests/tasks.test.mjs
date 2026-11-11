@@ -76,12 +76,12 @@ test('dates as typed', () => {
 test('completing a repeating task creates the next occurrence once', () => {
   const base = tasks.applyOps(tasks.emptyDoc('UTC'), [{
     type: 'add',
-    task: task('t1', { due: '2026-10-22', repeat: { type: 'weekly', days: [4] }, focus: true, subtasks: [{ id: 's1', title: 'Step', done: true }] }),
-  }]);
+    task: task('t1', { due: '2026-10-22', repeat: { type: 'weekly', days: [4] }, focus: true }),
+  }, { type: 'add', task: task('s1', { parent: 't1', status: 'done', doneAt: 'y' }) }]);
   /** @type {import('../lib/tasks.js').Op[]} */
   const ops = [{ type: 'done', id: 't1', at: '2026-10-23T08:00:00Z', today: FRI, nextId: 't2' }];
   const doc = tasks.applyOps(base, ops);
-  const [done, next] = doc.tasks;
+  const [done, , next, step] = doc.tasks;
   assert.equal(done.status, 'done');
   assert.equal(done.doneAt, '2026-10-23T08:00:00Z');
   assert.equal(done.next, 't2');
@@ -89,17 +89,17 @@ test('completing a repeating task creates the next occurrence once', () => {
   assert.equal(next.status, 'open');
   assert.equal(next.due, '2026-10-29');
   assert.equal(next.focus, false);
-  assert.deepEqual(next.subtasks, [{ id: 's1', title: 'Step', done: false }]);
+  assert.deepEqual([step.id, step.parent, step.status], ['t2-1', 't2', 'open'], 'a fresh copy of its parts');
   assert.equal('next' in next, false);
   // Re-applied (e.g. after a conflict): nothing doubles.
-  assert.equal(tasks.applyOps(doc, ops).tasks.length, 2);
+  assert.equal(tasks.applyOps(doc, ops).tasks.length, 4);
   // Reopening removes the occurrence it created.
   const reopened = tasks.applyOps(doc, [{ type: 'reopen', id: 't1' }]);
-  assert.deepEqual(reopened.tasks.map((t) => [t.id, t.status]), [['t1', 'open']]);
+  assert.deepEqual(reopened.tasks.map((t) => [t.id, t.status]), [['t1', 'open'], ['s1', 'done']]);
   assert.equal(reopened.tasks[0].doneAt, null);
   // Dropping with nextId null ends the series.
   const stopped = tasks.applyOps(base, [{ type: 'drop', id: 't1', at: 'x', today: FRI, nextId: null }]);
-  assert.deepEqual(stopped.tasks.map((t) => t.status), ['dropped']);
+  assert.deepEqual(stopped.tasks.map((t) => t.status), ['dropped', 'done']);
   // Non-repeating: no copy even with a nextId.
   const once = tasks.applyOps(tasks.emptyDoc(), [{ type: 'add', task: task('a') }, { type: 'done', id: 'a', at: 'x', today: FRI, nextId: 'b' }]);
   assert.equal(once.tasks.length, 1);
@@ -118,21 +118,17 @@ test('focus: at most 3 open tasks at a time', () => {
   assert.deepEqual(tasks.focused(doc).map((t) => t.id), ['c', 'd']);
 });
 
-test('tasks: edit, subtasks, normalize and commit message', () => {
+test('tasks: edit, normalize and commit message', () => {
   let doc = tasks.applyOps(tasks.emptyDoc(), [{ type: 'add', task: task('a', { title: 'Write report' }) }]);
   doc = tasks.applyOps(doc, [
     { type: 'edit', id: 'a', fields: { due: '2026-11-02', notes: 'Line 1\nLine 2' } },
-    { type: 'addSub', id: 'a', sub: { id: 's1', title: 'Outline', done: false } },
-    { type: 'toggleSub', id: 'a', subId: 's1', done: true },
     { type: 'edit', id: 'gone', fields: { title: 'x' } },
   ]);
   assert.equal(doc.tasks[0].due, '2026-11-02');
-  assert.deepEqual(doc.tasks[0].subtasks, [{ id: 's1', title: 'Outline', done: true }]);
   assert.deepEqual(tasks.normalize(JSON.parse(tasks.serialize(doc))), doc);
-  const raw = tasks.normalize({ tasks: [{ id: 'x', title: 'X', due: '2026-02-30', status: 'weird', repeat: { type: 'days', every: 0 }, subtasks: [null, { id: 's', title: 'S' }] }, { title: 'no id' }] });
+  const raw = tasks.normalize({ tasks: [{ id: 'x', title: 'X', due: '2026-02-30', status: 'weird', repeat: { type: 'days', every: 0 }, parent: 'x' }, { title: 'no id' }] });
   assert.equal(raw.tasks.length, 1);
-  assert.deepEqual([raw.tasks[0].due, raw.tasks[0].status, raw.tasks[0].repeat, raw.tasks[0].focus], [null, 'open', null, false]);
-  assert.deepEqual(raw.tasks[0].subtasks, [{ id: 's', title: 'S', done: false }]);
+  assert.deepEqual([raw.tasks[0].due, raw.tasks[0].status, raw.tasks[0].repeat, raw.tasks[0].focus, raw.tasks[0].parent], [null, 'open', null, false, undefined]);
   const ops = /** @type {import('../lib/tasks.js').Op[]} */ ([{ type: 'edit', id: 'a', fields: { due: FRI } }]);
   assert.equal(tasks.commitMessage(ops, doc, tasks.applyOps(doc, ops)), 'tasks: moved “Write report”');
   assert.equal(tasks.commitMessage([{ type: 'done', id: 'a', at: 'x', today: FRI, nextId: null }], doc, doc), 'tasks: done “Write report”');
@@ -328,9 +324,8 @@ test('domains: chat scope and root folder', () => {
 
 // ---- Linked chats ----
 
-/** @param {string} id @param {string|null} parent @param {string} at @param {string} [subtask] */
-const chat = (id, parent, at, subtask) => ({ id, title: `Chat ${id}`, parent, addedAt: `2026-11-0${at}T10:00:00Z`, ...(subtask ? { subtask } : {}) });
-const sub = (/** @type {string} */ id) => ({ id, title: `Sub ${id}`, done: false });
+/** @param {string} id @param {string|null} parent @param {string} at */
+const chat = (id, parent, at) => ({ id, title: `Chat ${id}`, parent, addedAt: `2026-11-0${at}T10:00:00Z` });
 
 test('chats: link keeps one owner, relink moves, unlink lifts the children', () => {
   let doc = tasks.emptyDoc();
@@ -361,39 +356,18 @@ test('chats: link keeps one owner, relink moves, unlink lifts the children', () 
   assert.ok(!('sessions' in doc.tasks[1]), 'an empty list is omitted');
 });
 
-test('chats: subtask inheritance, removing a subtask, and the chats of a subtask', () => {
-  let doc = tasks.emptyDoc();
-  doc = tasks.applyOps(doc, [
-    { type: 'add', task: task('t_a') },
-    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'addSub', id: 't_a', sub: sub('s_2') },
-    { type: 'link', id: 't_a', chat: chat('c1', null, '1') },
-    { type: 'link', id: 't_a', chat: chat('c2', 'c1', '2', 's_1') },
-    { type: 'link', id: 't_a', chat: chat('c3', 'c2', '3') }, // inherits s_1
-    { type: 'link', id: 't_a', chat: chat('c4', 'c2', '4', 's_2') }, // its own
-    { type: 'link', id: 't_a', chat: chat('c5', null, '5', 's_gone') }, // unknown subtask: dropped
-  ]);
-  const t = () => doc.tasks[0];
-  assert.equal(tasks.chatSubtask(t(), 'c1'), undefined);
-  assert.equal(tasks.chatSubtask(t(), 'c3'), 's_1');
-  assert.equal(tasks.chatSubtask(t(), 'c4'), 's_2');
-  assert.equal(tasks.chatSubtask(t(), 'c5'), undefined);
-  assert.deepEqual(tasks.chatsOfSubtask(t(), 's_1').map((c) => c.id), ['c2', 'c3']);
-  doc = tasks.applyOps(doc, [{ type: 'removeSub', id: 't_a', subId: 's_1' }]);
-  assert.equal(tasks.chatSubtask(t(), 'c3'), undefined);
-});
-
 test('chats: normalize repairs a damaged list and applyOps ignores a missing task', () => {
   const doc = tasks.normalize({ tasks: [{ id: 't_a', title: 'A', sessions: [
     { id: 'c1', title: 'One', parent: 'c1', addedAt: 'x' }, // own parent → root
     { id: 'c1', title: 'Repeated' },
-    { id: 'c2', parent: 'missing', subtask: 5 },
-    { id: 'c3', parent: 'c2', subtask: 's_1', addedAt: 'y' },
+    { id: 'c2', parent: 'missing' },
+    { id: 'c3', parent: 'c2', addedAt: 'y' },
     null, { title: 'no id' },
   ] }, { id: 't_b', title: 'B', sessions: [] }] });
   assert.deepEqual(doc.tasks[0].sessions, [
     { id: 'c1', title: 'One', parent: null, addedAt: 'x' },
     { id: 'c2', title: '', parent: null, addedAt: '' },
-    { id: 'c3', title: '', parent: 'c2', subtask: 's_1', addedAt: 'y' },
+    { id: 'c3', title: '', parent: 'c2', addedAt: 'y' },
   ]);
   assert.ok(!('sessions' in doc.tasks[1]));
   assert.deepEqual(tasks.applyOps(doc, [{ type: 'link', id: 'nope', chat: chat('c9', null, '1') }]), doc);
@@ -410,114 +384,97 @@ test('chats: closing a task or an occurrence does not touch its chats; commit me
   assert.equal(tasks.commitMessage(link, base, after), 'tasks: chats “Task t_a”');
 });
 
-// ---- Subtasks that are other tasks ----
+// ---- Subtasks: tasks with a parent ----
 
-test('linked subtask: closing, reopening and deleting the task follow into the subtask; dropping it keeps the link', () => {
-  const link = (/** @type {string} */ id, /** @type {string} */ subId, /** @type {string|null} */ to) => /** @type {const} */ ({ type: 'linkSub', id, subId, task: to });
-  let doc = tasks.applyOps(tasks.emptyDoc(), [
-    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b', { domain: 'other' }) },
-    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'addSub', id: 't_a', sub: sub('s_2') },
-    link('t_a', 's_1', 't_b'), link('t_a', 's_2', 't_a'), link('t_a', 's_9', 't_b'), // self and unknown subtask: ignored
-    link('t_a', 's_2', 't_nope'),
-  ]);
-  const a = () => doc.tasks[0];
-  assert.deepEqual(a().subtasks.map((s) => s.task), ['t_b', undefined]);
-  assert.deepEqual(tasks.linkedSubtasks(doc, 't_b').map((l) => l.sub.id), ['s_1']);
-  assert.equal(tasks.linkedTask(doc, a().subtasks[0])?.id, 't_b');
+const at = '2026-11-05T00:00:00Z';
+/** @param {import('../lib/tasks.js').TasksDoc} doc */
+const states = (doc) => doc.tasks.map((t) => `${t.id}:${t.status}`).join(' ');
 
-  const at = '2026-11-05T00:00:00Z';
-  doc = tasks.applyOps(doc, [{ type: 'done', id: 't_b', at, today: FRI, nextId: null }]);
-  assert.equal(a().subtasks[0].done, true);
-  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }]);
-  assert.equal(a().subtasks[0].done, false);
-  doc = tasks.applyOps(doc, [{ type: 'drop', id: 't_b', at, today: FRI, nextId: null }]);
-  assert.deepEqual(a().subtasks.map((s) => [s.id, s.done]), [['s_1', false], ['s_2', false]]);
-  assert.equal(tasks.subtaskState(doc, a().subtasks[0]), 'dropped');
-  assert.deepEqual(tasks.subtaskProgress(doc, a()), { done: 0, total: 1 });
-
-  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }]);
-  assert.equal(tasks.subtaskState(doc, a().subtasks[0]), 'open');
-  doc = tasks.applyOps(doc, [{ type: 'delete', id: 't_b' }]);
-  assert.deepEqual(a().subtasks.map((s) => s.id), ['s_2']);
-  doc = tasks.applyOps(doc, [{ type: 'removeSub', id: 't_a', subId: 's_2' }]);
-  doc = tasks.applyOps(doc, [{ type: 'addSub', id: 't_a', sub: sub('s_3') }, link('t_a', 's_3', null)]);
-  assert.equal(a().subtasks[0].task, undefined);
-});
-
-test('linked subtask: the task holds the state, whatever is done to the subtask', () => {
-  const at = '2026-11-05T00:00:00Z';
-  const base = tasks.applyOps(tasks.emptyDoc(), [
-    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b', { repeat: { type: 'days', every: 7 }, due: FRI }) },
-    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' },
-  ]);
-  const state = (/** @type {import('../lib/tasks.js').TasksDoc} */ doc) => doc.tasks.map((t) => [t.id, t.status, ...t.subtasks.map((s) => s.done)]);
-
-  // Ticking the subtask completes the task (and creates its next occurrence); unticking reopens it.
-  let doc = tasks.applyOps(base, [{ type: 'toggleSub', id: 't_a', subId: 's_1', done: true, at, today: FRI, nextId: 't_n' }]);
-  assert.deepEqual(state(doc), [['t_a', 'open', true], ['t_b', 'done'], ['t_n', 'open']]);
-  doc = tasks.applyOps(doc, [{ type: 'toggleSub', id: 't_a', subId: 's_1', done: false }]);
-  assert.deepEqual(state(doc), [['t_a', 'open', false], ['t_b', 'open']]);
-  // Without `at` (a caller that does not know about linked subtasks) nothing is left out of step.
-  assert.deepEqual(state(tasks.applyOps(base, [{ type: 'toggleSub', id: 't_a', subId: 's_1', done: true }])), state(base));
-  // A stored copy that disagrees is put right by any batch.
-  const off = structuredClone(base);
-  off.tasks[0].subtasks[0].done = true;
-  assert.deepEqual(state(tasks.applyOps(off, [])), state(base));
-
-  // Removing the subtask: with `at` the task is dropped too, without it the task lives on.
-  assert.deepEqual(state(tasks.applyOps(base, [{ type: 'removeSub', id: 't_a', subId: 's_1', at, today: FRI }])), [['t_a', 'open'], ['t_b', 'dropped']]);
-  assert.deepEqual(state(tasks.applyOps(base, [{ type: 'removeSub', id: 't_a', subId: 's_1' }])), [['t_a', 'open'], ['t_b', 'open']]);
-});
-
-test('linked subtask: dropping a task drops the tasks its subtasks are, and reopening brings those back', () => {
-  const at = '2026-11-05T00:00:00Z';
-  const drop = (/** @type {string} */ id, when = at) => /** @type {const} */ ({ type: 'drop', id, at: when, today: FRI, nextId: null });
-  const base = tasks.applyOps(tasks.emptyDoc(), [
-    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b') }, { type: 'add', task: task('t_c') }, { type: 'add', task: task('t_d') },
-    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' },
-    { type: 'addSub', id: 't_a', sub: sub('s_2') }, { type: 'linkSub', id: 't_a', subId: 's_2', task: 't_c' },
-    { type: 'addSub', id: 't_b', sub: sub('s_3') }, { type: 'linkSub', id: 't_b', subId: 's_3', task: 't_d' },
-  ]);
-  const status = (/** @type {import('../lib/tasks.js').TasksDoc} */ doc) => doc.tasks.map((t) => t.status).join(' ');
-
-  // t_c was dropped earlier: it goes down with t_a but does not come back with it; t_d is a subtask of a subtask.
-  let doc = tasks.applyOps(base, [drop('t_c', '2026-11-01T00:00:00Z'), drop('t_a')]);
-  assert.equal(status(doc), 'dropped dropped dropped dropped');
-  assert.equal(doc.tasks[0].subtasks.length, 2);
-  assert.equal(status(tasks.applyOps(doc, [{ type: 'reopen', id: 't_a' }])), 'open open dropped open');
-  // One of them can be brought back on its own.
-  assert.equal(status(tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }])), 'dropped open dropped open');
-
-  // A task that another open task has as a subtask stays; completing a task takes nothing with it.
-  doc = tasks.applyOps(base, [{ type: 'add', task: task('t_e') }, { type: 'addSub', id: 't_e', sub: sub('s_4') }, { type: 'linkSub', id: 't_e', subId: 's_4', task: 't_b' }, drop('t_a')]);
-  assert.equal(status(doc), 'dropped open dropped open open');
-  assert.equal(status(tasks.applyOps(base, [{ type: 'done', id: 't_a', at, today: FRI, nextId: null }])), 'done open open open');
-});
-
-test('linked subtask: the next occurrence of a repeating task gets plain subtasks', () => {
-  const at = '2026-11-05T00:00:00Z';
+test('subtasks: a task with a parent; children, descendants, progress and what counts as a step', () => {
   const doc = tasks.applyOps(tasks.emptyDoc(), [
-    { type: 'add', task: task('t_a', { repeat: { type: 'days', every: 1 }, due: FRI }) }, { type: 'add', task: task('t_b') },
-    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' },
-    { type: 'done', id: 't_b', at, today: FRI, nextId: null }, { type: 'done', id: 't_a', at, today: FRI, nextId: 't_n' },
+    { type: 'add', task: task('a') }, { type: 'add', task: task('b', { parent: 'a' }) },
+    { type: 'add', task: task('c', { parent: 'b' }) }, { type: 'add', task: task('d', { parent: 'a', domain: 'home' }) },
+    { type: 'add', task: task('e', { parent: 'a', due: FRI }) }, { type: 'add', task: task('f', { parent: 'nope' }) },
   ]);
-  assert.deepEqual(doc.tasks[0].subtasks, [{ ...sub('s_1'), done: true, task: 't_b' }]);
-  assert.deepEqual(doc.tasks[2].subtasks, [{ ...sub('s_1'), done: false }]);
+  assert.equal(doc.tasks.find((t) => t.id === 'f')?.parent, undefined, 'an unknown parent is left out');
+  assert.deepEqual(tasks.children(doc, 'a').map((t) => t.id), ['b', 'd', 'e']);
+  assert.deepEqual(tasks.descendants(doc, 'a').map((t) => t.id), ['b', 'c', 'd', 'e']);
+  assert.deepEqual(['b', 'c', 'd', 'e'].map((id) => tasks.isStep(doc, /** @type {any} */ (doc.tasks.find((t) => t.id === id)))), [true, true, false, false]);
+  const after = tasks.applyOps(doc, [{ type: 'done', id: 'b', at, today: FRI, nextId: null }, { type: 'drop', id: 'd', at, today: FRI, nextId: null }]);
+  assert.deepEqual(tasks.progress(after, /** @type {any} */ (after.tasks[0])), { done: 1, total: 2 }, 'dropped ones do not count');
+
+  // Moving under another task: never under itself or something under it.
+  const moved = tasks.applyOps(doc, [{ type: 'edit', id: 'a', fields: { parent: 'c' } }, { type: 'edit', id: 'c', fields: { parent: 'e' } }, { type: 'edit', id: 'd', fields: { parent: null } }]);
+  assert.deepEqual(moved.tasks.map((t) => t.parent ?? '-').join(' '), '- a e - a -');
 });
 
-test('linked subtask: its chats live in the other task', () => {
-  let doc = tasks.applyOps(tasks.emptyDoc(), [
-    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b') },
-    { type: 'addSub', id: 't_a', sub: sub('s_1') },
-    { type: 'link', id: 't_a', chat: chat('c1', null, '1') },
-    { type: 'link', id: 't_a', chat: chat('c2', 'c1', '2', 's_1') },
-    { type: 'link', id: 't_a', chat: chat('c3', 'c2', '3') }, // inherits s_1
+test('subtasks: closing a task closes the open ones under it, and reopening brings back exactly those', () => {
+  const base = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('a') }, { type: 'add', task: task('b', { parent: 'a', domain: 'other' }) },
+    { type: 'add', task: task('c', { parent: 'b' }) }, { type: 'add', task: task('d', { parent: 'a' }) },
+    { type: 'add', task: task('e', { parent: 'a' }) },
+    { type: 'done', id: 'd', at: '2026-11-01T00:00:00Z', today: FRI, nextId: null },
+    { type: 'drop', id: 'e', at: '2026-11-01T00:00:00Z', today: FRI, nextId: null },
   ]);
-  doc = tasks.applyOps(doc, [{ type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' }]);
-  assert.deepEqual(doc.tasks[0].sessions?.map((c) => c.id), ['c1']);
-  assert.deepEqual(doc.tasks[1].sessions?.map((c) => [c.id, c.parent, c.subtask]), [['c2', null, undefined], ['c3', 'c2', undefined]]);
-  // A new chat tied to the subtask is stored in the linked task too.
-  doc = tasks.applyOps(doc, [{ type: 'link', id: 't_a', chat: chat('c4', null, '4', 's_1') }]);
-  assert.deepEqual(doc.tasks[1].sessions?.map((c) => c.id), ['c2', 'c3', 'c4']);
-  assert.deepEqual(doc.tasks[0].sessions?.map((c) => c.id), ['c1']);
+  for (const type of /** @type {const} */ (['done', 'drop'])) {
+    const closed = tasks.applyOps(base, [{ type, id: 'a', at, today: FRI, nextId: null }]);
+    const s = type === 'done' ? 'done' : 'dropped';
+    assert.equal(states(closed), `a:${s} b:${s} c:${s} d:done e:dropped`);
+    assert.equal(states(tasks.applyOps(closed, [{ type: 'reopen', id: 'a' }])), 'a:open b:open c:open d:done e:dropped');
+    // One of them can be brought back alone, with what went down with it.
+    assert.equal(states(tasks.applyOps(closed, [{ type: 'reopen', id: 'b' }])), `a:${s} b:open c:open d:done e:dropped`);
+  }
+  // Deleting a task deletes what is under it.
+  assert.equal(states(tasks.applyOps(base, [{ type: 'delete', id: 'b' }])), 'a:open d:done e:dropped');
+});
+
+test('subtasks: a repeating task copies its parts, shifting their dates, and reopening takes the copy back', () => {
+  const base = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('a', { repeat: { type: 'days', every: 7 }, due: FRI }) },
+    { type: 'add', task: task('b', { parent: 'a', due: '2026-10-21' }) }, { type: 'add', task: task('c', { parent: 'b' }) },
+    { type: 'add', task: task('d', { parent: 'a' }) }, { type: 'drop', id: 'd', at: '2026-10-01T00:00:00Z', today: FRI, nextId: null },
+    { type: 'link', id: 'b', chat: chat('c1', null, '1') },
+  ]);
+  const doc = tasks.applyOps(base, [{ type: 'done', id: 'a', at, today: FRI, nextId: 'n' }]);
+  const copies = doc.tasks.filter((t) => t.createdAt === at);
+  assert.deepEqual(copies.map((t) => [t.id, t.parent, t.due, t.status, t.sessions]), [
+    ['n', undefined, '2026-10-30', 'open', undefined], ['n-1', 'n', '2026-10-28', 'open', undefined], ['n-2', 'n-1', null, 'open', undefined],
+  ]);
+  assert.equal(states(tasks.applyOps(doc, [{ type: 'reopen', id: 'a' }])), 'a:open b:open c:open d:dropped');
+});
+
+test('subtasks: chats live in the task they are about, and a part stays out of the archive while its task does', () => {
+  const doc = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('a') }, { type: 'add', task: task('b', { parent: 'a' }) },
+    { type: 'link', id: 'a', chat: chat('c1', null, '1') }, { type: 'link', id: 'b', chat: chat('c2', 'c1', '2') },
+    { type: 'done', id: 'b', at: '2026-01-01T00:00:00Z', today: FRI, nextId: null },
+  ]);
+  assert.deepEqual(doc.tasks[1].sessions?.map((c) => [c.id, c.parent]), [['c2', null]], 'a chat of another task cannot be its parent');
+  assert.deepEqual(Object.keys(tasks.splitArchive(doc, FRI).byYear), []);
+  const both = tasks.applyOps(doc, [{ type: 'done', id: 'a', at: '2026-01-02T00:00:00Z', today: FRI, nextId: null }]);
+  assert.deepEqual(tasks.splitArchive(both, FRI).byYear['2026']?.map((t) => t.id), ['a', 'b']);
+});
+
+test('subtasks: the older shape (a subtasks list) is read as tasks with a parent', () => {
+  const doc = tasks.normalize({ tasks: [
+    { id: 't_a', title: 'Trip', domain: 'home', status: 'open', createdAt: 'x', subtasks: [
+      { id: 's_1', title: 'Pack', done: true }, { id: 's_2', title: 'Flights', done: false, task: 't_b' },
+      { id: 't_b', title: 'Same id as a task', done: false }, null,
+    ], sessions: [
+      { id: 'c1', parent: null }, { id: 'c2', parent: 'c1', subtask: 's_1' }, { id: 'c3', parent: 'c2' }, { id: 'c4', parent: null, subtask: 's_2' },
+    ] },
+    { id: 't_b', title: 'Book flights', domain: 'money', status: 'open', subtasks: [] },
+    { id: 't_c', title: 'Closed', domain: 'home', status: 'done', doneAt: 'z', subtasks: [{ id: 's_3', title: 'Left', done: false }] },
+  ] });
+  assert.deepEqual(doc.tasks.map((t) => [t.id, t.parent ?? '-', t.domain, t.status, (t.sessions ?? []).map((c) => `${c.id}<${c.parent ?? '-'}`).join(',')]), [
+    ['t_a', '-', 'home', 'open', 'c1<-'],
+    ['s_1', 't_a', 'home', 'done', 'c2<-,c3<c2'],
+    ['t_b-t_a', 't_a', 'home', 'open', ''],
+    ['t_b', 't_a', 'money', 'open', 'c4<-'],
+    ['t_c', '-', 'home', 'done', ''],
+    ['s_3', 't_c', 'home', 'done', ''],
+  ]);
+  assert.ok(doc.tasks.every((t) => !('subtasks' in t)));
+  // Saved and read again, nothing changes.
+  assert.deepEqual(tasks.normalize(JSON.parse(tasks.serialize(doc))), doc);
 });

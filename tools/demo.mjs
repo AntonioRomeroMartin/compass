@@ -45,11 +45,13 @@ write('domains.json', { version: 1, domains: [
 ] });
 write('tasks.json', tasks.serialize(tasks.applyOps(tasks.emptyDoc(TZ), [
   { type: 'add', task: tasks.newTask({ title: 'Read the exchange fee schedule', domain: 'money', due: date(-2) }) },
-  { type: 'add', task: tasks.newTask({ id: 't_demo_report', title: 'Write the weekly report', domain: 'work', due: date(0),
-      subtasks: [{ id: 's_demo_outline', title: 'Outline', done: false }, { id: 's_demo_charts', title: 'Charts', done: false }] }) },
+  { type: 'add', task: tasks.newTask({ id: 't_demo_report', title: 'Write the weekly report', domain: 'work', due: date(0) }) },
+  { type: 'add', task: tasks.newTask({ id: 't_demo_outline', title: 'Outline', domain: 'work', parent: 't_demo_report' }) },
+  { type: 'add', task: tasks.newTask({ id: 't_demo_charts', title: 'Charts', domain: 'work', parent: 't_demo_report' }) },
+  { type: 'add', task: tasks.newTask({ title: 'Check the fees figure', domain: 'money', due: date(1), parent: 't_demo_report' }) },
   { type: 'link', id: 't_demo_report', chat: { id: 'chat_1', title: 'Weekly report', parent: null, addedAt: '2026-01-01T09:00:00Z' } },
-  { type: 'link', id: 't_demo_report', chat: { id: 'chat_2', title: 'Outline', parent: 'chat_1', subtask: 's_demo_outline', addedAt: '2026-01-01T10:00:00Z' } },
-  { type: 'link', id: 't_demo_report', chat: { id: 'chat_3', title: 'Pick the figures', parent: 'chat_2', addedAt: '2026-01-01T11:00:00Z' } },
+  { type: 'link', id: 't_demo_outline', chat: { id: 'chat_2', title: 'Outline', parent: null, addedAt: '2026-01-01T10:00:00Z' } },
+  { type: 'link', id: 't_demo_outline', chat: { id: 'chat_3', title: 'Pick the figures', parent: 'chat_2', addedAt: '2026-01-01T11:00:00Z' } },
 ])));
 
 // ---- sources: one of each kind, in several states
