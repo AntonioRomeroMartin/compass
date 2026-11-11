@@ -154,17 +154,20 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 ```
 
 - A source is anything to learn from: `kind` is `book`, `video`, `course`, `article` or `podcast`.
-- `url` links to it; `file` is a path inside the `sources/` folder of its domain's folder (a PDF, a transcript),
-  kept out of the data repo. Both are optional.
+- `url` is its **location**: a link, or free text saying where to find it ("paper book, shelf"). Every source should
+  have one. `file` is an optional **local copy**: a path inside the `knowledge/sources/` folder of its domain's
+  folder (a PDF, a transcript), kept out of the data repo.
 - `domain` is optional: a source without one shows only in the Sources tab and the Sources card on Home; one with
   a domain also shows on that area's page.
-- `status`: `want`, `doing`, `done`, `dropped` or `skip` (not for you: kept only as material). It is shown in the
-  words of each kind (Reading, Watching, Listening…). Changing it sets the dates: `doing` sets `started` (if empty),
-  `done` and `dropped` set `finished`, `want` and `skip` clear both.
+- `status` has three values, shown in the words of each kind (Reading, Watching, Listening…): `pending` → `doing` →
+  `done`. `done` means finished or given up on. `null` (no status) means **material only**: something the assistant
+  can read or watch that the user will not consume. Changing it sets the dates: `doing` sets `started` (if empty),
+  `done` sets `finished`, `pending` and no status clear both.
 - `notes` are your own thoughts; `quotes` are lines from it, each with an optional page. `rating`: 1-5.
 - `olid` and `cover` (books) come from an Open Library search: only the cover's id is stored, the image is not.
-- A `books.json` from before sources (`{ "books": [...] }`, statuses `want`, `reading`, `read`, `dropped`) is
-  moved once with `compass sources migrate`: every book keeps its data.
+- Earlier files are moved once with `compass sources migrate`: a `books.json` (`{ "books": [...] }`) becomes
+  `sources.json`, and the earlier statuses (`want`, `dropped`, `skip`) become `pending`, `done` and none. Every source
+  keeps its data and dates.
 
 ### Journal (`journal.json`, sealed)
 
@@ -236,7 +239,7 @@ compass habit add "Stretch" --domain sport --freq mon,wed,fri   # or: daily, 3/w
 compass habit done stretch yesterday  # also: today (default), -N, YYYY-MM-DD
 compass source add "A novel" --find  # --find: author and cover from Open Library; --domain D to file it in an area
 compass source add "A talk" --kind video --url https://… --file talk.txt --domain work
-compass source reading novel         # or: want, doing, done, dropped, skip, and each kind's words (watched…)
+compass source reading novel         # or: pending, doing, done, none (material only), and each kind's words (watched…)
 compass sources --kind video --status done   # also: --domain D, --cwd PATH
 compass source quote novel "A line worth keeping" --page 41
 secret-tool store --label="compass encryption" service compass key encryption   # the journal's password, once

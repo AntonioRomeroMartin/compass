@@ -38,20 +38,20 @@ test('sources: add, status with dates, rating, quotes, edit, list and delete', (
 
 test('sources: kinds, link and file, and the filters', () => {
   const { run, runAll, read } = setup({ 'goals.json': GOALS, 'domains.json': DOMAINS });
-  assert.match(run('source', 'add', 'A Talk', '--kind', 'video', '--domain', 'work', '--url', 'https://example.com/v', '--file', 'talk.txt', '--status', 'skip'),
-    /– \[s_\w+\] A Talk — video · not for me · work/);
+  assert.match(run('source', 'add', 'A Talk', '--kind', 'video', '--domain', 'work', '--url', 'https://example.com/v', '--file', 'talk.txt', '--status', 'none'),
+    /– \[s_\w+\] A Talk — video · material only · work/);
   run('source', 'add', 'A Story');
   assert.equal(read('a', 'sources.json').sources[1].domain, null);
   run('source', 'add', 'A Show', '--kind', 'podcast', '--domain', 'work');
   run('source', 'listening', 'show');
   assert.match(run('sources', '--kind', 'podcast'), /A Show — podcast · listening/);
-  assert.match(run('sources', '--status', 'not-for-me'), /A Talk/);
-  assert.doesNotMatch(run('sources', '--status', 'not-for-me'), /A Show|A Story/);
+  assert.match(run('sources', '--status', 'none'), /A Talk/);
+  assert.doesNotMatch(run('sources', '--status', 'none'), /A Show|A Story/);
   assert.doesNotMatch(run('sources', '--domain', 'work'), /A Story/);
-  assert.match(run('source', 'show', 'talk'), /  Link: https:\/\/example\.com\/v\n  File: sources\/talk\.txt/);
+  assert.match(run('source', 'show', 'talk'), /  Location: https:\/\/example\.com\/v\n  Copy: knowledge\/sources\/talk\.txt/);
   run('source', 'edit', 'talk', '--url', 'none', '--kind', 'course');
   const t = read('a', 'sources.json').sources[0];
-  assert.deepEqual([t.url, t.kind, t.status], [null, 'course', 'skip']);
+  assert.deepEqual([t.url, t.kind, t.status], [null, 'course', null]);
   run('source', 'edit', 'story', '--domain', 'reading');
   assert.equal(read('a', 'sources.json').sources[1].domain, 'reading');
   assert.match(runAll('sources', '--kind', 'zine').stderr, /unknown kind/);
@@ -71,8 +71,26 @@ test('sources migrate: books.json becomes sources.json in one commit', () => {
   const [s] = read('a', 'sources.json').sources;
   assert.deepEqual([s.id, s.kind, s.status, s.started], ['b_1', 'book', 'doing', '2026-01-02']);
   assert.match(run('sources'), /▸ \[b_1\] Old Book — book · reading · A/);
-  assert.match(runAll('sources', 'migrate').stderr, /already exists/);
+  assert.match(runAll('sources', 'migrate').stderr, /nothing to migrate/);
   // The other clone gets it on its next pull.
   git(join(dir, 'b'), 'pull', '-q');
   assert.ok(existsSync(join(dir, 'b', 'sources.json')) && !existsSync(join(dir, 'b', 'books.json')));
+});
+
+test('sources migrate: the earlier statuses become pending, doing, done or none, keeping the dates', () => {
+  const old = { version: 1, timeZone: 'UTC', sources: [
+    { id: 's_1', kind: 'book', title: 'Wanted', status: 'want' },
+    { id: 's_2', kind: 'video', title: 'Given up', status: 'dropped', started: '2026-01-02', finished: '2026-02-03' },
+    { id: 's_3', kind: 'video', title: 'Only material', status: 'skip' },
+  ] };
+  const { dir, run, runAll, read } = setup({ 'goals.json': GOALS, 'domains.json': DOMAINS, 'sources.json': old });
+  assert.match(runAll('sources').stderr, /earlier statuses.*sources migrate/);
+  assert.match(run('sources', 'migrate'), /sources: pending, doing, done or none \(3 sources\)/);
+  const list = read('a', 'sources.json').sources;
+  assert.deepEqual(list.map((/** @type {any} */ x) => x.status), ['pending', 'done', null]);
+  assert.deepEqual([list[1].started, list[1].finished], ['2026-01-02', '2026-02-03']);
+  assert.equal(git(join(dir, 'a'), 'log', '-1', '--format=%s'), 'sources: pending, doing, done or none (3 sources)\n');
+  assert.match(run('sources'), /– \[s_3\] Only material — video · material only/);
+  assert.equal(runAll('sources').stderr, '');
+  assert.match(runAll('sources', 'migrate').stderr, /nothing to migrate/);
 });

@@ -60,7 +60,7 @@ export function sourceRow(s, show = {}) {
 }
 
 /**
- * Sources grouped by status: in progress, want, done this year; done earlier, dropped and not for me, folded.
+ * Sources grouped by status: in progress, pending, done this year; done earlier and material only (no status), folded.
  * With one kind, the headings use its words (Reading, Want to read, Read in 2026…).
  * @param {Source[]} list @param {(s: Source) => string|null} [areaOf]  chip with the source's area
  * @param {Kind|''} [kind]  every source is of this kind
@@ -73,14 +73,14 @@ export function sourceGroups(list, areaOf = () => null, kind = '') {
   const done = sorted.filter((s) => s.status === 'done');
   /** @param {Status} st */
   const of = (st) => sorted.filter((s) => s.status === st);
+  const material = sorted.filter((s) => !s.status);
   /** @type {[string, Source[], boolean][]} title, sources, folded */
   const groups = [
     [words.doing, of('doing'), false],
-    [words.want, of('want'), false],
+    [words.pending, of('pending'), false],
     [`${words.done} in ${year}`, done.filter((s) => s.finished?.startsWith(year)), false],
     [`${words.done} before ${year}`, done.filter((s) => !s.finished?.startsWith(year)), true],
-    [words.dropped, of('dropped'), true],
-    [words.skip, of('skip'), true],
+    [sourcesLib.NO_STATUS_TEXT, material, true],
   ];
   /** @type {HTMLElement[]} */
   const out = [];
@@ -106,9 +106,20 @@ export function areaName(s) {
   return domainsLib.label(doms, domainsLib.canonical(doms, s.domain) || s.domain) || s.domain;
 }
 
-/** The status chips of a kind, in the order they are shown. @param {Kind} kind @param {Status[]} [only] */
-const statusItems = (kind, only = [...sourcesLib.STATUSES]) =>
-  only.map((st) => /** @type {[string, string]} */ ([st, sourcesLib.STATUS_TEXT[kind][st]]));
+/** Value of the chip for "no status". */
+const NONE = 'none';
+
+/** The status chips of a kind, in the order they are shown: pending, doing, done, then material only. @param {Kind} kind */
+const statusItems = (kind) => [
+  ...['pending', 'doing', 'done'].map((st) => /** @type {[string, string]} */ ([st, sourcesLib.STATUS_TEXT[kind][/** @type {Status} */ (st)]])),
+  /** @type {[string, string]} */ ([NONE, sourcesLib.NO_STATUS_TEXT]),
+];
+
+/** A chip's value as a status. @param {string} v @returns {Status|null} */
+const statusOf = (v) => (v === NONE ? null : /** @type {Status} */ (v));
+
+/** Is a location a link? (Otherwise it is free text, e.g. "paper book, shelf".) @param {string} v */
+const isLink = (v) => /^https?:\/\/\S+$/i.test(v);
 
 // ---------------------------------------------------------------- the source's sheet
 
@@ -124,15 +135,15 @@ export function openSource(source) {
     $('source-cover').replaceChildren(cover(s, 'M'));
     $('source-title').textContent = s.title;
     $('source-author').textContent = [sourcesLib.KIND_TEXT[s.kind], s.author].filter(Boolean).join(' · ');
-    const dates = [s.started && `Started ${s.started}`, s.finished && `${s.status === 'dropped' ? 'Dropped' : 'Finished'} ${s.finished}`];
+    const dates = [s.started && `Started ${s.started}`, s.finished && `Finished ${s.finished}`];
     $('source-dates').textContent = dates.filter(Boolean).join(' · ');
     $('source-where').replaceChildren(
-      ...(s.url ? [h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open link ↗')] : []),
-      ...(s.file ? [h('span', { class: 'hint' }, `File: sources/${s.file}`)] : []),
+      ...(s.url ? [isLink(s.url) ? h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open link ↗') : h('span', { class: 'hint' }, `Location: ${s.url}`)] : []),
+      ...(s.file ? [h('span', { class: 'hint' }, `Copy: knowledge/sources/${s.file}`)] : []),
     );
 
-    chipPicker($('source-status'), statusItems(s.kind), s.status, (v) => {
-      dispatchSources({ type: 'status', id: s.id, status: /** @type {Status} */ (v), today });
+    chipPicker($('source-status'), statusItems(s.kind), s.status ?? NONE, (v) => {
+      dispatchSources({ type: 'status', id: s.id, status: statusOf(v), today });
       draw();
     });
     for (const btn of $('source-status').querySelectorAll('button')) /** @type {HTMLButtonElement} */ (btn).disabled = !edit;
@@ -215,8 +226,8 @@ export function openSourceForm(area = '', source, startKind = 'book') {
 
   /** @type {Kind} */
   let kind = source?.kind ?? startKind;
-  /** @type {Status} */
-  let status = 'want';
+  /** @type {string} */
+  let status = 'pending';
   // The kind changes the words (heading, author, statuses) and whether Open Library is offered.
   const drawKind = () => {
     $('source-form-title').textContent = `${source ? 'Edit' : 'New'} ${sourcesLib.KIND_TEXT[kind].toLowerCase()}`;
@@ -226,7 +237,7 @@ export function openSourceForm(area = '', source, startKind = 'book') {
     $('source-results').hidden = kind !== 'book';
     $('source-picked').hidden = kind !== 'book';
     showPicked();
-    chipPicker($('source-status-new'), statusItems(kind, ['want', 'doing', 'done', 'skip']), status, (v) => { status = /** @type {Status} */ (v); });
+    chipPicker($('source-status-new'), statusItems(kind), status, (v) => { status = v; });
   };
   chipPicker($('source-kind'), sourcesLib.KINDS.map((k) => /** @type {[string, string]} */ ([k, sourcesLib.KIND_TEXT[k]])), kind, (v) => {
     kind = /** @type {Kind} */ (v);
@@ -291,13 +302,13 @@ export function openSourceForm(area = '', source, startKind = 'book') {
     /** @type {import('../../../lib/sources.js').SourceFields} */
     const fields = {
       kind, title, author: String(f.author.value).trim() || null, url: String(f.url.value).trim() || null,
-      file: String(f.file.value).trim().replace(/^sources\//, '') || null, domain: domain || null,
+      file: String(f.file.value).trim().replace(/^knowledge\/sources\//, '') || null, domain: domain || null,
       olid: book ? picked.olid : null, cover: book ? picked.cover : null,
     };
     if (source) dispatchSources({ type: 'edit', id: source.id, fields });
     else {
       const s = sourcesLib.newSource({ ...fields, title });
-      dispatchSources({ type: 'add', source: { ...s, ...sourcesLib.withStatus(s, status, todayKey()) } });
+      dispatchSources({ type: 'add', source: { ...s, ...sourcesLib.withStatus(s, statusOf(status), todayKey()) } });
     }
     dialog.close();
   };
