@@ -544,7 +544,10 @@ function today(ctx, flags) {
   }
   if (view.closedWithChats.length) {
     console.log('Closed tasks with chats (delete those chats, then: compass task chats <task> --prune …)');
-    for (const t of view.closedWithChats) console.log(`  ${taskLine(t, ctx)}`);
+    for (const t of view.closedWithChats) {
+      console.log(`  ${taskLine(t, ctx)}`);
+      for (const c of tasks.staleChats(ctx.tasks, t)) console.log(`    - ${c.title || '(untitled)'} [${c.id}]`);
+    }
   }
 }
 
@@ -837,7 +840,7 @@ function chatLines(t, doc, indent = '') {
   const walk = (nodes, depth, of) => {
     for (const { chat, children } of nodes) {
       const also = tasks.tasksOfChat(doc, chat.id, of.id).filter((x) => !here.has(x.id));
-      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]${also.length ? ` (also in: ${also.map((x) => `${x.title} [${x.id}]`).join(', ')})` : ''}`);
+      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]${also.length ? ` (also in: ${also.map((x) => `${x.status === 'open' ? '' : `${x.status} `}${x.title} [${x.id}]`).join(', ')})` : ''}`);
       walk(children, depth + 1, of);
     }
   };
