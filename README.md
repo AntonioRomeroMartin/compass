@@ -102,10 +102,11 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   `[{ "id": "…", "title": "…", "parent": null, "addedAt": "…" }]`. `id` is whatever identifies the
   session in the assistant that runs it; `title` is a copy for display; `parent` is the chat that opened this one
   (`null`: opened from the task itself), which makes a tree ordered by `addedAt`. A chat about a part of a task is
-  linked to that part, which is a task too. A chat belongs to one task. Compass only stores the links (the CLI and the
-  task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Only open
-  tasks get chats, and `compass today` ends with the closed tasks that still have some, so the assistant can offer
-  to delete them. Unlinking a chat moves its sub-chats up one level, and a repeating task's next occurrence starts
+  linked to that part, which is a task too, and its parent shows it under the part's title. A chat that works on
+  several tasks is linked to each (`--move` takes it from the others); a closed task gives up the chats an open task
+  still has. Compass only stores the links (the CLI and the task sheet show them; the sheet is read-only): opening
+  and closing the chats is up to the assistant. Only open tasks get chats, and `compass today` ends with the closed
+  tasks that still have some, so the assistant can offer to delete them. Unlinking a chat moves its sub-chats up one level, and a repeating task's next occurrence starts
   with none.
 - `parent` (omitted at the top): the task this one is part of. A subtask is a task like any other, with its own
   domain (by default its parent's), date, chats and subtasks, to any depth. A plain step (open parent, no date,
@@ -224,7 +225,7 @@ compass task add "Water plants" --domain home --repeat "every 3 days"
 printf '%s\n' '"Pay the fee" --due +3' '"Book a room" --domain home' \
   | compass task add --stdin --domain studies   # several tasks, one commit; options here apply to every line
 compass task done "problem set"       # a task by id or part of its title
-compass task link "report" SESSION --title "Draft" [--parent SESSION]   # record a chat on a task
+compass task link "report" SESSION --title "Draft" [--parent SESSION]   # record a chat on a task (one chat can be on several)
 compass task add "Book flights" --parent "trip" --domain studies   # a part of a task (here in another domain)
 compass task chats "report"           # its chats as a tree (--prune a,b forgets the ones listed; unlink does the same)
 compass task brief "report"           # starter text for a new chat: title, notes, subtasks, date, chats

@@ -255,6 +255,7 @@ button.area { width: 100%; text-align: left; font: inherit; color: inherit; curs
 .chat-tree { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .chat-tree .chat-tree { padding-left: 18px; margin-top: 4px; }
 .chat-tree li { display: grid; gap: 4px; justify-items: start; }
+.chat-tree .part { color: var(--muted); font-size: .85rem; }
 .edit-row { display: flex; align-items: center; gap: 8px; }
 .edit-row input { flex: 1; min-width: 0; }
 .edit-list:not(.sub) > li > .edit-row input { font-weight: 600; }
