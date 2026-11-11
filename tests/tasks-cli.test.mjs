@@ -363,7 +363,7 @@ test('chats: closing a task leaves its chats for the agent to clean up; brief gi
   assert.doesNotMatch(run('today'), /Closed tasks with chats/);
 });
 
-test('chats: a parent shows its parts\' chats; closing keeps a chat that another open task has', () => {
+test('chats: a parent shows its parts\' chats; a chat another open task has is not one to delete', () => {
   const { run, read } = setupWithDomains();
   run('task', 'add', 'Write report', '--domain', 'sport');
   run('task', 'add', 'Outline', '--parent', 'report');
@@ -375,8 +375,13 @@ test('chats: a parent shows its parts\' chats; closing keeps a chat that another
   assert.match(run('task', 'show', 'report'), /chats 1 \(\+1 in parts\)/);
   run('task', 'done', 'report');
   const saved = read('a', 'tasks.json').tasks;
-  assert.deepEqual(saved.map((/** @type {any} */ t) => (t.sessions ?? []).map((/** @type {any} */ c) => c.id)), [['local_1'], [], ['local_2']]);
-  assert.match(run('today'), /Closed tasks with chats[^\n]*\n {2}✓ \[t_\w+\] Write report — sport · sub 1\/1 · chats 1 · done/);
+  assert.deepEqual(saved.map((/** @type {any} */ t) => (t.sessions ?? []).map((/** @type {any} */ c) => c.id)), [['local_1'], ['local_2'], ['local_2']]);
+  // Only the chat no open task has is offered for deletion.
+  assert.match(run('today'), /Closed tasks with chats[^\n]*\n {2}✓ \[t_\w+\] Write report [^\n]*\n {4}- Main chat \[local_1\]\n?$/);
+  assert.match(run('task', 'chats', 'trip'), /Outline chat \[local_2\] \(also in: done Outline \[t_\w+\]\)/);
+  // Once the last open task closes, it is offered too.
+  run('task', 'done', 'trip');
+  assert.match(run('today'), /\[local_1\][\s\S]*Outline[\s\S]*\[local_2\][\s\S]*Plan trip[\s\S]*\[local_2\]/);
 });
 
 test('subtasks: --parent makes a part of a task, listed under it when it is a plain step', () => {

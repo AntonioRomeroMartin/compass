@@ -375,7 +375,7 @@ test('chats: normalize repairs a damaged list and applyOps ignores a missing tas
   assert.deepEqual(tasks.applyOps(doc, [{ type: 'link', id: 'nope', chat: chat('c9', null, '1') }]), doc);
 });
 
-test('chats: a closed task gives up the chats an open task still has; a parent sees its parts\' chats', () => {
+test('chats: a closed task keeps its chats; only those no open task has are stale; a parent sees its parts\' chats', () => {
   let doc = tasks.applyOps(tasks.emptyDoc(), [
     { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_s', { parent: 't_a' }) }, { type: 'add', task: task('t_b') },
     { type: 'link', id: 't_a', chat: chat('c1', null, '1') },
@@ -383,17 +383,27 @@ test('chats: a closed task gives up the chats an open task still has; a parent s
     { type: 'link', id: 't_b', chat: chat('c2', null, '3') },
   ]);
   /** @param {string} id */
-  const ids = (id) => doc.tasks.find((t) => t.id === id)?.sessions?.map((c) => c.id) ?? [];
+  const get = (id) => /** @type {import('../lib/tasks.js').Task} */ (doc.tasks.find((t) => t.id === id));
+  /** @param {string} id */
+  const ids = (id) => get(id).sessions?.map((c) => c.id) ?? [];
+  /** @param {string} id */
+  const stale = (id) => tasks.staleChats(doc, get(id)).map((c) => c.id);
   assert.deepEqual(tasks.chatsBelow(doc, 't_a').map(({ task: p, tree }) => [p.id, tree.map((n) => n.chat.id)]), [['t_s', ['c2']]]);
   assert.deepEqual(tasks.chatsBelow(doc, 't_s'), []);
+  assert.deepEqual(stale('t_a'), [], 'an open task has nothing stale');
 
-  // Closing t_a closes t_s too: c2 lives on in t_b, so t_s lets it go; c1 stays for the clean-up.
+  // Closing t_a closes t_s too; both keep their chats, but c2 lives on in t_b: only c1 is done with.
   doc = tasks.applyOps(doc, [{ type: 'done', id: 't_a', at, today: FRI, nextId: null }]);
-  assert.deepEqual([ids('t_a'), ids('t_s'), ids('t_b')], [['c1'], [], ['c2']]);
+  assert.deepEqual([ids('t_a'), ids('t_s'), ids('t_b')], [['c1'], ['c2'], ['c2']]);
+  assert.deepEqual([stale('t_a'), stale('t_s')], [['c1'], []]);
 
-  // Linking a chat of a closed task to an open one takes it from the closed one (it is not to be deleted now).
-  doc = tasks.applyOps(doc, [{ type: 'link', id: 't_b', chat: chat('c1', null, '4') }]);
-  assert.deepEqual([ids('t_a'), ids('t_b')], [[], ['c2', 'c1']]);
+  // Reopening finds the chats where they were.
+  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_a' }]);
+  assert.deepEqual([ids('t_a'), ids('t_s')], [['c1'], ['c2']]);
+
+  // When its last open task closes, a shared chat is done with everywhere.
+  doc = tasks.applyOps(doc, [{ type: 'done', id: 't_a', at, today: FRI, nextId: null }, { type: 'done', id: 't_b', at, today: FRI, nextId: null }]);
+  assert.deepEqual([stale('t_a'), stale('t_s'), stale('t_b')], [['c1'], ['c2'], ['c2']]);
 });
 
 test('chats: closing a task or an occurrence does not touch its chats; commit message names the task', () => {
