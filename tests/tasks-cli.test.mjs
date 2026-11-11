@@ -305,27 +305,24 @@ test('closed tasks older than 30 days move to the archive of their year on the n
   assert.doesNotMatch(run('tasks', '--all'), /Old exam/);
 });
 
-test('chats: link, tree, subtasks, move, unlink and prune', () => {
+test('chats: link, tree, move, unlink and prune', () => {
   const { run, runAll, read } = setupWithDomains();
   run('task', 'add', 'Write report', '--domain', 'sport');
   run('task', 'add', 'Plan trip', '--domain', 'sport');
-  run('task', 'sub', 'report', '--add', 'Outline');
-  run('task', 'sub', 'report', '--add', 'Charts');
   const saved = () => read('a', 'tasks.json').tasks;
 
   assert.match(run('task', 'chats', 'report'), /No chats linked/);
   assert.match(run('task', 'link', 'report', 'local_1', '--title', 'Main chat'), /^tasks: chats “Write report”\n.*chats 1/);
-  run('task', 'link', 'report', 'local_2', '--title', 'Outline chat', '--parent', 'local_1', '--subtask', 'outline');
+  run('task', 'link', 'report', 'local_2', '--title', 'Outline chat', '--parent', 'local_1');
   run('task', 'link', 'report', 'local_3', '--title', 'Deeper', '--parent', 'local_2');
-  assert.deepEqual(saved()[0].sessions.map((/** @type {any} */ c) => [c.id, c.parent, c.subtask ? 'sub' : '-']), [['local_1', null, '-'], ['local_2', 'local_1', 'sub'], ['local_3', 'local_2', '-']]);
+  assert.deepEqual(saved()[0].sessions.map((/** @type {any} */ c) => [c.id, c.parent]), [['local_1', null], ['local_2', 'local_1'], ['local_3', 'local_2']]);
   assert.equal(saved()[1].sessions, undefined);
   assert.equal(run('task', 'chats', 'report'), [
-    '- Main chat [local_1]', '  - Outline chat [local_2] — subtask: Outline', '    - Deeper [local_3] — subtask: Outline',
+    '- Main chat [local_1]', '  - Outline chat [local_2]', '    - Deeper [local_3]',
   ].join('\n') + '\n');
 
   // Mistakes are refused and nothing is written.
   assert.match(runAll('task', 'link', 'report', 'local_9', '--parent', 'local_x').stderr, /not a chat of this task/);
-  assert.match(runAll('task', 'link', 'report', 'local_9', '--subtask', 'nothing').stderr, /no subtask .* matches/);
   assert.match(runAll('task', 'link', 'report').stderr, /which chat session/);
   assert.match(runAll('task', 'chats', 'report', '--prune').stderr, /needs session ids/);
   // Already linked elsewhere: ignored, unless --move.
@@ -344,63 +341,51 @@ test('chats: link, tree, subtasks, move, unlink and prune', () => {
 test('chats: closing a task leaves its chats for the agent to clean up; brief gives the starter text', () => {
   const { run, read } = setupWithDomains();
   run('task', 'add', 'Write report', '--domain', 'sport', '--due', '2026-12-01', '--notes', 'Two pages.\nFor the course.', '--ongoing', 'ongoing/report.md');
-  run('task', 'sub', 'report', '--add', 'Outline');
+  run('task', 'add', 'Outline', '--parent', 'report');
   run('task', 'link', 'report', 'local_1', '--title', 'Main chat');
   const text = run('task', 'brief', 'report');
   assert.match(text, /^Task: Write report \[t_\w+\]\nDomain: sport · due 2026-12-01 /);
-  assert.match(text, /Work in progress: ongoing\/report\.md\nNotes:\n {2}Two pages\.\n {2}For the course\.\nSubtasks:\n {2}\[ \] Outline \[s_\w+\]\nChats already on it:\n {2}- Main chat \[local_1\]\n?$/);
+  assert.match(text, /Work in progress: ongoing\/report\.md\nNotes:\n {2}Two pages\.\n {2}For the course\.\nSubtasks:\n {2}· \[t_\w+\] Outline — sport\nChats already on it:\n {2}- Main chat \[local_1\]\n?$/);
   run('task', 'done', 'report');
   // Still listed after closing: `chats` finds closed tasks too.
   assert.match(run('task', 'chats', 'report'), /Main chat \[local_1\]/);
   assert.equal(read('a', 'tasks.json').tasks[0].sessions.length, 1);
 });
 
-test('linked subtasks: --add --domain creates the task, both close and reopen together, removal needs --yes', () => {
+test('subtasks: --parent makes a part of a task, listed under it when it is a plain step', () => {
   const { run, runAll, read } = setupWithDomains();
   run('task', 'add', 'Trip', '--domain', 'sport');
-  run('task', 'sub', 'trip', '--add', 'Book flights', '--domain', 'studies');
+  run('task', 'add', 'Pack', '--parent', 'trip');
+  run('task', 'add', 'Book flights', '--parent', 'trip', '--domain', 'studies', '--due', '2026-12-01');
+  run('task', 'add', 'Socks', '--parent', 'pack');
   const saved = () => read('a', 'tasks.json').tasks;
-  const [trip, flights] = saved();
-  assert.equal(flights.title, 'Book flights');
-  assert.equal(flights.domain, 'studies');
-  assert.equal(trip.subtasks[0].task, flights.id);
-  assert.match(run('task', 'show', 'trip'), /\[ \] Book flights \(s_\w+\) → task t_\w+/);
+  const id = (/** @type {string} */ title) => saved().find((/** @type {any} */ t) => t.title === title).id;
+  assert.deepEqual(saved().map((/** @type {any} */ t) => [t.title, t.domain, t.parent ? saved().find((/** @type {any} */ x) => x.id === t.parent).title : '-']),
+    [['Trip', 'sport', '-'], ['Pack', 'sport', 'Trip'], ['Book flights', 'studies', 'Trip'], ['Socks', 'sport', 'Pack']]);
 
-  run('task', 'sub', 'trip', 'flights');
-  assert.deepEqual(saved().map((/** @type {any} */ t) => t.status), ['open', 'done']);
-  assert.equal(saved()[0].subtasks[0].done, true);
-  run('task', 'sub', 'trip', 'flights', '--undo');
-  assert.deepEqual(saved().map((/** @type {any} */ t) => t.status), ['open', 'open']);
-  run('task', 'done', 'Book flights');
-  assert.equal(saved()[0].subtasks[0].done, true);
+  // A plain step is listed under its task; a part with a date or another domain has a line of its own.
+  const list = run('tasks');
+  assert.match(list, /· \[t_\w+\] Trip — sport · sub 0\/2\n {2}· \[t_\w+\] Pack — sub 0\/1\n {4}· \[t_\w+\] Socks\n/);
+  assert.match(list, /Book flights — due 2026-12-01 .* · studies · part of Trip/);
+  assert.match(run('task', 'show', 'trip'), /\n {2}· \[t_\w+\] Pack — sport · sub 0\/1\n {4}· \[t_\w+\] Socks — sport\n {2}· \[t_\w+\] Book flights/);
+  assert.match(run('task', 'brief', 'flights'), /^Task: Book flights \[t_\w+\]\nPart of: Trip \[t_\w+\]\n/);
 
-  // A chat on the subtask is stored in the task that is the same thing.
-  run('task', 'link', 'trip', 'local_1', '--title', 'Flights', '--subtask', 'flights');
-  assert.equal(saved()[0].sessions, undefined);
-  assert.equal(saved()[1].sessions[0].id, 'local_1');
-
-  run('task', 'undo', 'Book flights');
-  assert.match(runAll('task', 'sub', 'trip', '--remove', 'flights').stderr, /drops that task as well.*--yes/);
-  run('task', 'sub', 'trip', '--remove', 'flights', '--yes');
-  assert.deepEqual(saved().map((/** @type {any} */ t) => [t.title, t.status, t.subtasks.length]), [['Trip', 'open', 0], ['Book flights', 'dropped', 0]]);
-
-  // Dropping a task drops the tasks its subtasks are; undo brings them back.
-  run('task', 'sub', 'trip', '--add', 'Pack', '--domain', 'studies');
-  assert.match(run('task', 'drop', 'trip'), /also dropped: .* Pack/);
-  assert.match(run('task', 'show', 'trip', ), /\[-\] Pack/);
+  // Closing a task closes what is under it; undo brings back exactly that.
+  run('task', 'done', 'socks');
+  const out = run('task', 'drop', 'trip');
+  assert.match(out, /also dropped: .* Pack[^]*also dropped: .* Book flights/);
+  assert.doesNotMatch(out, /Socks/);
+  assert.deepEqual(saved().map((/** @type {any} */ t) => t.status), ['dropped', 'dropped', 'dropped', 'done']);
   run('task', 'undo', 'trip');
-  assert.deepEqual(saved().filter((/** @type {any} */ t) => t.title !== 'Book flights').map((/** @type {any} */ t) => t.status), ['open', 'open']);
-  run('task', 'sub', 'trip', '--remove', 'pack', '--yes');
+  assert.deepEqual(saved().map((/** @type {any} */ t) => t.status), ['open', 'open', 'open', 'done']);
 
-  // An existing task can be linked later, and unlinked with "none".
-  run('task', 'add', 'Passport', '--domain', 'sport');
-  run('task', 'sub', 'trip', '--add', 'Passport check');
-  run('task', 'sub', 'trip', '--link', 'passport', '--task', 'Passport');
-  assert.ok(saved()[0].subtasks[0].task);
-  assert.match(runAll('task', 'sub', 'trip', '--link', 'passport').stderr, /--link needs --task/);
-  run('task', 'sub', 'trip', '--link', 'passport', '--task', 'none');
-  assert.equal(saved()[0].subtasks[0].task, undefined);
-  run('task', 'sub', 'trip', '--link', 'passport', '--task', 'Passport');
-  run('task', 'delete', 'Passport', '--yes');
-  assert.equal(saved()[0].subtasks.length, 0);
+  // Moving under another task, and back to the top; never under itself.
+  assert.match(runAll('task', 'edit', 'trip', '--parent', 'socks').stderr, /cannot be part of itself/);
+  run('task', 'edit', 'flights', '--parent', 'none');
+  assert.equal(saved().find((/** @type {any} */ t) => t.id === id('Book flights')).parent, undefined);
+
+  // Deleting a task deletes what is under it, after --yes.
+  assert.match(runAll('task', 'delete', 'trip').stderr, /and the 2 under it for good/);
+  run('task', 'delete', 'trip', '--yes');
+  assert.deepEqual(saved().map((/** @type {any} */ t) => t.title), ['Book flights']);
 });

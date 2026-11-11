@@ -70,29 +70,24 @@ Usage:
                                         of the day and week, deadlines within 7 days, ongoing work
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
-  compass task add "title" (--domain D | --cwd PATH) [--due DATE] [--repeat RULE]
+  compass task add "title" (--domain D | --cwd PATH | --parent <task>) [--due DATE] [--repeat RULE]
                    [--ongoing PATH] [--notes T] [--location T] [--event E] [--focus]
                                         --event: the event it prepares (moves with it)
+                                        --parent: a subtask, i.e. a task that is part of another one (in its
+                                        domain unless one is given), with its own date, chats and subtasks.
+                                        Lists show a plain step (no date, same domain) under its task.
+                                        Closing a task closes the open ones under it; undo brings them back
   compass task add --stdin [options]    one task per line ("title" --due fri …), all in one commit;
                                         options given here apply to every line
   compass task done|undo|drop|focus|unfocus|show <task>
   compass task delete <task> --yes      for good (drop keeps a record)
   compass task drop <task> --stop       a repeating task: no next occurrence
   compass task move <task> [DATE]       default: tomorrow
-  compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE]
+  compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE] [--parent <task>]
                    [--ongoing PATH] [--notes T] [--location T] [--event E]   (none clears a field)
-  compass task sub <task> <subtask> [--undo] | --add T | --remove <subtask> [--yes]
-  compass task sub <task> --add T --task <other> | --domain D
-  compass task sub <task> --link <subtask> --task <other>|none
-                                        a subtask that is another task (same or another domain): --add T --domain D
-                                        creates that task; completing or reopening either does the same to the
-                                        other, removing the subtask (--yes) drops the task, deleting the task
-                                        removes the subtask; dropping a task drops the tasks its subtasks are
-                                        (task undo brings them back); its chats move to that task
-  compass task link <task> <session> [--title T] [--parent <session>] [--subtask <subtask>] [--move]
+  compass task link <task> <session> [--title T] [--parent <session>] [--move]
                                         record a chat session working on the task (--parent: the chat that
-                                        opened it; --subtask: the subtask it is about, inherited by its
-                                        sub-chats; --move: take it from another task)
+                                        opened it; --move: take it from another task)
   compass task unlink <task> <session>…  forget chats (their sub-chats move up one level)
   compass task chats <task> [--prune <session>[,…]]
                                         the task's chats as a tree; --prune forgets the ones listed
@@ -318,16 +313,18 @@ function goalLine(g, now, tz) {
 
 /**
  * One compact line per task. ⭐ focus, ✓ done, ✗ dropped.
- * @param {Task} t @param {Ctx} ctx @param {{ domain?: boolean }} [opts]
+ * @param {Task} t @param {Ctx} ctx @param {{ domain?: boolean, part?: boolean }} [opts]  part: name the task it is part of
  */
 function taskLine(t, ctx, opts = {}) {
+  const parent = opts.part === false ? undefined : tasks.parentOf(ctx.tasks, t);
   const mark = t.status === 'done' ? '✓' : t.status === 'dropped' ? '✗' : t.focus ? '⭐' : '·';
   const bits = [];
   if (t.due) bits.push(t.status === 'open' ? `due ${t.due} (${relDays(daysUntil(t.due, ctx.today, 'UTC'))})` : `due ${t.due}`);
   if (opts.domain !== false) bits.push(t.domain);
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
-  const steps = tasks.subtaskProgress(ctx.tasks, t);
+  const steps = tasks.progress(ctx.tasks, t);
   if (steps.total) bits.push(`sub ${steps.done}/${steps.total}`);
+  if (parent) bits.push(`part of ${parent.title}`);
   if (t.sessions?.length) bits.push(`chats ${t.sessions.length}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
   if (t.event) bits.push(`for ${ctx.events.events.find((e) => e.id === t.event)?.title ?? t.event}`);
@@ -335,6 +332,27 @@ function taskLine(t, ctx, opts = {}) {
   if (t.notes) bits.push('notes');
   if (t.status !== 'open' && t.doneAt) bits.push(`${t.status} ${periodKey('day', new Date(t.doneAt), ctx.tz)}`);
   return `${mark} [${t.id}] ${t.title}${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
+}
+
+/**
+ * A task's line and, indented under it, its open plain steps (and theirs).
+ * @param {Task} t @param {Ctx} ctx @param {{ domain?: boolean, part?: boolean }} [opts] @param {string} [indent]
+ * @returns {string[]}
+ */
+function taskLines(t, ctx, opts = {}, indent = '') {
+  /** @param {string} d */
+  const canon = (d) => domains.canonical(ctx.domains, d);
+  const steps = tasks.children(ctx.tasks, t.id).filter((c) => c.status === 'open' && tasks.isStep(ctx.tasks, c, canon));
+  return [`${indent}${taskLine(t, ctx, opts)}`, ...steps.flatMap((c) => taskLines(c, ctx, { domain: false, part: false }, `${indent}  `))];
+}
+
+/**
+ * Everything under a task, whatever its state, indented.
+ * @param {Task} t @param {Ctx} ctx @param {string} [indent]
+ * @returns {string[]}
+ */
+function treeLines(t, ctx, indent = '') {
+  return tasks.children(ctx.tasks, t.id).flatMap((c) => [`${indent}${taskLine(c, ctx, { part: false })}`, ...treeLines(c, ctx, `${indent}  `)]);
 }
 
 /**
@@ -504,7 +522,7 @@ function today(ctx, flags) {
   } else if (scope.note) console.log(`Scope: everything (${scope.note})`);
   if (view.focus.length || view.focusElsewhere) {
     console.log('Focus');
-    for (const t of view.focus) console.log(`  ${taskLine(t, ctx)}`);
+    for (const t of view.focus) console.log(taskLines(t, ctx, {}, '  ').join('\n'));
     if (view.focusElsewhere) console.log(`  (+${view.focusElsewhere} in other domains)`);
   }
   if (!view.groups.length) console.log('Nothing due in the next 7 days.');
@@ -514,13 +532,13 @@ function today(ctx, flags) {
     const id = g.domain && g.label !== g.domain ? ` [${g.domain}]` : '';
     console.log(`${g.label}${id}${g.agenda ? ' · agenda only' : ''}`);
     for (const e of g.events) console.log(`  ${eventLine(e, ctx, { domain: false })}`);
-    for (const t of g.tasks) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
+    for (const t of g.tasks) console.log(taskLines(t, ctx, { domain: false }, '  ').join('\n'));
     for (const goal of g.goals) console.log(`  ${goalLine(goal, ctx.now, ctx.gtz)}`);
     for (const t of g.ongoing) console.log(`  ↳ ongoing [${t.id}] ${t.title} → ${t.ongoing}`);
     if (g.later.length) console.log('  Later');
-    for (const t of g.later) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
+    for (const t of g.later) console.log(taskLines(t, ctx, { domain: false }, '  ').join('\n'));
     if (g.undated.length) console.log('  No date');
-    for (const t of g.undated) console.log(`  ${taskLine(t, ctx, { domain: false })}`);
+    for (const t of g.undated) console.log(taskLines(t, ctx, { domain: false }, '  ').join('\n'));
   }
 }
 
@@ -550,7 +568,15 @@ function listTasks(ctx, flags) {
       && (!due || (t.status === 'open' && tasks.isDueWithin(t, /** @type {'today'|'week'|'overdue'} */ (due), ctx.today))))
     .sort((a, b) => Number(a.status !== 'open') - Number(b.status !== 'open') || tasks.byDue(a, b));
   if (!list.length) console.log('No tasks.');
-  for (const t of list) console.log(taskLine(t, ctx));
+  // A plain step is printed under its task when that one is listed too.
+  const listed = new Set(list.map((t) => t.id));
+  /** @param {string} d */
+  const canon = (d) => domains.canonical(ctx.domains, d);
+  const view = flags.archived ? { ...ctx, tasks: { ...ctx.tasks, tasks: list } } : ctx;
+  for (const t of list) {
+    if (t.parent && listed.has(t.parent) && tasks.isStep(view.tasks, t, canon)) continue;
+    console.log(taskLines(t, view).join('\n'));
+  }
 }
 
 /**
@@ -619,14 +645,17 @@ function task(ctx, sub, rest, flags) {
   const newOne = (args, opts) => {
     const title = args[0] ?? str(opts.title);
     if (!title) fail('task add needs a title: compass task add "title" --domain D');
-    const scope = scopeFrom(ctx, opts);
-    if (!scope.id) fail(scope.note ? `${scope.note}; use --domain` : 'a task needs a domain: --domain D (or --cwd PATH)');
+    const parent = str(opts.parent) ? findTask(ctx.tasks, str(opts.parent)) : undefined;
+    // A subtask goes in its task's domain unless it is given one.
+    const scope = parent && !opts.domain && !opts.cwd ? { id: parent.domain, note: '' } : scopeFrom(ctx, opts);
+    if (!scope.id) fail(scope.note ? `${scope.note}; use --domain` : 'a task needs a domain: --domain D (or --cwd PATH | --parent <task>)');
     const due = str(opts.due) !== undefined ? date(/** @type {string} */ (str(opts.due))) : null;
     const repeat = str(opts.repeat) ? rule(/** @type {string} */ (str(opts.repeat)), due ?? ctx.today) : null;
     const t = tasks.newTask({
       title, domain: /** @type {string} */ (scope.id), due: repeat && !due ? tasks.firstDue(repeat, ctx.today) : due,
       repeat, ongoing: orNull(str(opts.ongoing)), notes: orNull(str(opts.notes)), location: orNull(str(opts.location)),
       ...(str(opts.event) ? { event: findEvent(ctx.events, str(opts.event)).id } : {}),
+      ...(parent ? { parent: parent.id } : {}),
     }, ctx.now);
     return { t, focus: !!opts.focus };
   };
@@ -695,7 +724,10 @@ function task(ctx, sub, rest, flags) {
         break;
       case 'delete':
         // Permanent (no record left); the app asks first, here it takes an explicit --yes.
-        if (!flags.yes) fail(`delete removes “${t.title}” for good; to keep a record use “compass task drop”. Add --yes to delete it.`);
+        if (!flags.yes) {
+          const under = tasks.descendants(ctx.tasks, tid).length;
+          fail(`delete removes “${t.title}”${under ? ` and the ${under} under it` : ''} for good; to keep a record use “compass task drop”. Add --yes to delete it.`);
+        }
         build = () => ({ tasks: [{ type: 'delete', id: tid }] });
         break;
       case 'move': {
@@ -724,56 +756,23 @@ function task(ctx, sub, rest, flags) {
         }
         for (const k of /** @type {const} */ (['notes', 'ongoing', 'location'])) if (str(flags[k]) !== undefined) fields[k] = orNull(str(flags[k]));
         if (str(flags.event) !== undefined) fields.event = orNull(str(flags.event)) === null ? null : findEvent(ctx.events, str(flags.event)).id;
+        if (str(flags.parent) !== undefined) {
+          const parent = orNull(str(flags.parent)) === null ? undefined : findTask(ctx.tasks, str(flags.parent));
+          if (parent && (parent.id === tid || tasks.descendants(ctx.tasks, tid).some((d) => d.id === parent.id))) fail('a task cannot be part of itself or of something under it');
+          fields.parent = parent?.id ?? /** @type {any} */ (null);
+        }
         if (!Object.keys(fields).length) fail('nothing to edit');
         build = () => ({ tasks: [{ type: 'edit', id: tid, fields }] });
-        break;
-      }
-      case 'sub': {
-        const add = str(flags.add);
-        const other = str(flags.task) && str(flags.task) !== 'none' ? findTask(ctx.tasks, str(flags.task)) : undefined;
-        if (other?.id === tid) fail('a subtask cannot be its own task');
-        if (add) {
-          const subId = newId('s_');
-          // --task T: the subtask is that task; --domain D: a new task is created there for it.
-          const created = !other && str(flags.domain) ? tasks.newTask({ title: add, domain: domainRef(ctx, /** @type {string} */ (str(flags.domain))) }, ctx.now) : undefined;
-          const link = other?.id ?? created?.id;
-          build = () => ({
-            tasks: [...(created ? [/** @type {const} */ ({ type: 'add', task: created })] : []),
-              { type: 'addSub', id: tid, sub: { id: subId, title: add, done: other?.status === 'done', ...(link ? { task: link } : {}) } }],
-          });
-          break;
-        }
-        if (flags.link) {
-          const subId = subtaskRef(t, /** @type {string} */ (str(flags.link))).id;
-          if (!str(flags.task)) fail('--link needs --task <task> (or --task none to unlink)');
-          build = () => ({ tasks: [{ type: 'linkSub', id: tid, subId, task: other?.id ?? null }] });
-          break;
-        }
-        const ref = str(flags.remove) ?? rest[1];
-        const subId = subtaskRef(t, String(ref ?? '')).id;
-        const linked = tasks.linkedTask(ctx.tasks, /** @type {import('../lib/tasks.js').Subtask} */ (t.subtasks.find((x) => x.id === subId)));
-        if (str(flags.remove) && linked?.status === 'open' && !flags.yes) {
-          fail(`“${linked.title}” is this subtask too: removing it drops that task as well. Add --yes to do it.`);
-        }
-        build = (fresh) => {
-          const cur = live(fresh);
-          const other = tasks.linkedTask(fresh, cur.subtasks.find((x) => x.id === subId) ?? { id: '', title: '', done: false });
-          // The task that is the same thing follows (lib/tasks.js): closed, reopened or dropped with the subtask.
-          if (str(flags.remove)) return { tasks: [{ type: 'removeSub', id: tid, subId, at, today: ctx.today }] };
-          return { tasks: [{ type: 'toggleSub', id: tid, subId, done: !flags.undo, at, today: ctx.today, nextId: other?.repeat ? newId('t_') : null }] };
-        };
         break;
       }
       case 'link': {
         const session = rest[1] ?? fail('which chat session? compass task link <task> <session>');
         const parent = str(flags.parent);
-        const subRef = str(flags.subtask);
         const title = str(flags.title) ?? '';
         build = (fresh) => {
           const cur = live(fresh);
           if (parent && !cur.sessions?.some((c) => c.id === parent)) fail(`“${parent}” is not a chat of this task (link it first)`);
-          const subId = subRef === undefined ? undefined : subtaskRef(cur, subRef).id;
-          const chat = { id: session, title, parent: parent ?? null, ...(subId ? { subtask: subId } : {}), addedAt: at };
+          const chat = { id: session, title, parent: parent ?? null, addedAt: at };
           return { tasks: [{ type: flags.move ? 'relink' : 'link', id: tid, chat }] };
         };
         break;
@@ -807,21 +806,11 @@ function task(ctx, sub, rest, flags) {
     console.log(taskLine(saved, view));
     const next = saved.next ? fresh.tasks.find((x) => x.id === saved.next) : undefined;
     if (next) console.log(`next: ${taskLine(next, view)}`);
-    // Tasks that were its subtasks and went with it (`compass task undo` on one brings it back).
-    if (sub === 'drop') for (const x of fresh.tasks) if (x.id !== id && x.status === 'dropped' && x.doneAt === saved.doneAt) console.log(`also dropped: ${taskLine(x, view)}`);
+    // What was under it and went with it (`compass task undo` on it, or on one of them, brings it back).
+    if (sub === 'done' || sub === 'drop') {
+      for (const x of tasks.descendants(fresh, id)) if (x.status === saved.status && x.doneAt === saved.doneAt) console.log(`also ${sub === 'done' ? 'done' : 'dropped'}: ${taskLine(x, view, { part: false })}`);
+    }
   }
-}
-
-/**
- * A subtask of a task by id or part of its title.
- * @param {Task} t @param {string} ref
- */
-function subtaskRef(t, ref) {
-  const q = ref.toLowerCase();
-  const exact = t.subtasks.filter((s) => s.id === ref);
-  const matches = exact.length ? exact : t.subtasks.filter((s) => q && s.title.toLowerCase().includes(q));
-  if (matches.length !== 1) fail(matches.length ? `“${ref}” matches several subtasks` : `no subtask of this task matches “${ref}”`);
-  return matches[0];
 }
 
 /**
@@ -834,9 +823,7 @@ function chatLines(t, indent = '') {
   /** @param {ReturnType<typeof tasks.chatTree>} nodes @param {number} depth */
   const walk = (nodes, depth) => {
     for (const { chat, children } of nodes) {
-      const subId = tasks.chatSubtask(t, chat.id);
-      const subTitle = subId ? t.subtasks.find((s) => s.id === subId)?.title : undefined;
-      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]${subTitle ? ` — subtask: ${subTitle}` : ''}`);
+      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]`);
       walk(children, depth + 1);
     }
   };
@@ -859,7 +846,10 @@ function brief(t, ctx) {
   if (t.location) out.push(`Where: ${t.location}`);
   if (t.ongoing) out.push(`Work in progress: ${t.ongoing}`);
   if (t.notes) out.push('Notes:', ...t.notes.split('\n').map((l) => `  ${l}`));
-  if (t.subtasks.length) out.push('Subtasks:', ...t.subtasks.map((s) => `  ${SUB_MARK[tasks.subtaskState(ctx.tasks, s)]} ${s.title} [${s.id}]`));
+  const parent = tasks.parentOf(ctx.tasks, t);
+  if (parent) out.splice(1, 0, `Part of: ${parent.title} [${parent.id}]`);
+  const under = treeLines(t, ctx, '  ');
+  if (under.length) out.push('Subtasks:', ...under);
   const chats = chatLines(t, '  ');
   if (chats.length) out.push('Chats already on it:', ...chats);
   console.log(out.join('\n'));
@@ -874,13 +864,11 @@ function focusFull(doc) {
   return fail(`already ${tasks.FOCUS_MAX} tasks with focus (unfocus one first):\n${list}`);
 }
 
-/** How a subtask is printed: done, to do, or a task that was dropped. */
-const SUB_MARK = { done: '[x]', open: '[ ]', dropped: '[-]' };
-
 /** @param {Task} t @param {Ctx} ctx */
 function showTask(t, ctx) {
   console.log(taskLine(t, ctx));
-  for (const s of t.subtasks) console.log(`  ${SUB_MARK[tasks.subtaskState(ctx.tasks, s)]} ${s.title} (${s.id})${s.task ? ` → task ${s.task}` : ''}`);
+  const under = treeLines(t, ctx, '  ');
+  if (under.length) console.log(under.join('\n'));
   if (t.notes) console.log(t.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
   const chats = chatLines(t, '  ');
   if (chats.length) console.log(['  chats:', ...chats].join('\n'));

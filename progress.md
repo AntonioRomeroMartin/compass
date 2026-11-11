@@ -34,9 +34,9 @@
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
 - Chats linked to tasks (`task.sessions`; `link`/`unlink`/`relink` ops): CLI `task link|unlink|chats|brief`, a
-  read-only tree in the task sheet. Linked subtasks (`subtask.task`, `linkSub` op, CLI `task sub --task|--domain|--link`):
-  that task holds the state (the subtask copies it in `applyOps`) and the chats; dropping a task drops the tasks
-  its subtasks are, and reopening it brings them back.
+  read-only tree in the task sheet. Subtasks are tasks with `parent` (any domain, any depth; CLI `task add|edit
+  --parent`): plain steps are listed under their task, closing a task closes what is under it and reopening brings
+  it back. The older `subtasks` list is read and converted on the next write.
 - Tests: `node --test tests/*.test.mjs`, also run by GitHub on every PR.
 - Next: phase 5, the exchanges' import (read-only API keys; it also brings trading balances to net worth) and the
   bank's download (Enable Banking). Deferred: day close and Focus in the app (the CLI

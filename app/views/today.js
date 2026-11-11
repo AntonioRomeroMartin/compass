@@ -4,7 +4,7 @@ import * as domainsLib from '../../lib/domains.js';
 import { current, domainsStore, eventsStore, goalsStore, loaded, persist, state, tasksStore, todayKey, tz } from '../core/data.js';
 import { $, h } from '../core/ui.js';
 import { goalRow } from '../modules/goals/view.js';
-import { taskRow } from '../modules/tasks/view.js';
+import { isStep, taskRows } from '../modules/tasks/view.js';
 import { eventRow } from '../modules/events/view.js';
 import { activeHabits, habitRow } from '../modules/habits/view.js';
 import { isDueOn } from '../../lib/habits.js';
@@ -34,7 +34,7 @@ export function renderTodayView() {
   const blocks = t.groups.map((g) => ({
     domain: g.domain,
     label: g.label,
-    rows: [...g.events.map((x) => eventRow(x)), ...g.tasks.map((x) => taskRow(x)), ...g.goals.map(goalRow), ...g.ongoing.map((x) => taskRow(x)), ...(habitsByArea.get(g.domain) ?? []).map((x) => habitRow(x))],
+    rows: [...g.events.map((x) => eventRow(x)), ...g.tasks.flatMap((x) => taskRows(x)), ...g.goals.map(goalRow), ...g.ongoing.flatMap((x) => taskRows(x)), ...(habitsByArea.get(g.domain) ?? []).map((x) => habitRow(x))],
   }));
   for (const [area, list] of habitsByArea) {
     if (!t.groups.some((g) => g.domain === area)) blocks.push({ domain: area, label: domainsLib.label(doms, area) || area, rows: list.map((x) => habitRow(x)) });
@@ -46,7 +46,7 @@ export function renderTodayView() {
   }
   // Open tasks without a date, folded at the end, by area.
   const shown = new Set(t.groups.flatMap((g) => [...g.tasks, ...g.ongoing].map((x) => x.id)));
-  const undated = tasksDoc.tasks.filter((x) => x.status === 'open' && !x.due && !shown.has(x.id));
+  const undated = tasksDoc.tasks.filter((x) => x.status === 'open' && !x.due && !shown.has(x.id) && !isStep(x));
   if (!blocks.length) view.append(h('p', { class: 'empty' }, 'Nothing due in the next 7 days. Add a task with “+”.'));
   if (undated.length) {
     /** @type {Map<string, Task[]>} */
@@ -63,7 +63,7 @@ export function renderTodayView() {
         'div',
         { class: 'undated-area' },
         h('h3', {}, domainsLib.label(doms, k) || k),
-        h('ul', { class: 'rows' }, ...list.map((x) => taskRow(x))),
+        h('ul', { class: 'rows' }, ...list.flatMap((x) => taskRows(x))),
       )),
     );
     details.addEventListener('toggle', () => { state.undatedOpen = /** @type {HTMLDetailsElement} */ (details).open; persist(); });

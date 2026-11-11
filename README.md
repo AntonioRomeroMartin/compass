@@ -84,7 +84,7 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   "version": 1,
   "timeZone": "Area/City",
   "tasks": [{ "id": "t_…", "title": "…", "domain": "studies/course-a", "due": "2026-10-30", "notes": null,
-              "subtasks": [{ "id": "s_…", "title": "…", "done": false }],
+              "parent": "t_…",
               "repeat": { "type": "weekly", "days": [1, 4] }, "focus": false,
               "ongoing": "notes/draft.md", "status": "open", "createdAt": "…", "doneAt": null }]
 }
@@ -99,21 +99,23 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   from the due date, or from today when the task was late, so a late completion does not pile up overdue copies.
 - `ongoing`: path of a text file with the state of work in progress; "today" lists these tasks even without a date.
 - `sessions` (omitted when empty): the chat sessions working on the task,
-  `[{ "id": "…", "title": "…", "parent": null, "subtask": "s_…", "addedAt": "…" }]`. `id` is whatever identifies the
+  `[{ "id": "…", "title": "…", "parent": null, "addedAt": "…" }]`. `id` is whatever identifies the
   session in the assistant that runs it; `title` is a copy for display; `parent` is the chat that opened this one
-  (`null`: opened from the task itself), which makes a tree ordered by `addedAt`; `subtask` ties a chat to one
-  subtask and its sub-chats inherit it. A chat belongs to one task. Compass only stores the links (the CLI and the
+  (`null`: opened from the task itself), which makes a tree ordered by `addedAt`. A chat about a part of a task is
+  linked to that part, which is a task too. A chat belongs to one task. Compass only stores the links (the CLI and the
   task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Unlinking a
   chat moves its sub-chats up one level, and a repeating task's next occurrence starts with none.
-- A subtask may carry `task`: the id of another task (same domain or another) that it is the same thing as.
-  That task holds the state and the chats of the subtask; the subtask's `done` is a copy that `applyOps` keeps
-  equal to it, so no client can leave them out of step. Completing or reopening either one does the same to the
-  other (`toggleSub` with `at`, `today`, `nextId`); removing the subtask with `at` drops the task (without: the
-  task lives on), and deleting the task removes the subtask. A dropped task keeps its place as a subtask, shown as
-  dropped and left out of the count, so reopening it restores it. Dropping a task also drops the open tasks its
-  subtasks are, unless another open task has them too; reopening it brings back exactly those. Completing a task
-  takes nothing with it. The next occurrence of a repeating task gets plain subtasks. Confirming first is up to the
-  caller (the CLI asks for `--yes`, the task sheet asks).
+- `parent` (omitted at the top): the task this one is part of. A subtask is a task like any other, with its own
+  domain (by default its parent's), date, chats and subtasks, to any depth. A plain step (open parent, no date,
+  same domain) is listed under its task; anything else gets a line of its own that names its task. Closing a task
+  closes, with the same timestamp, the open tasks under it, and reopening it brings back exactly those (reopening
+  one of them alone also works); deleting a task deletes what is under it. Progress (`n/m`) counts the parts that
+  were not dropped. A repeating task's next occurrence gets a fresh copy of its parts, dates shifted along. A part
+  only moves to the yearly archive with its task. Confirming first is up to the caller (the CLI asks for `--yes`
+  to delete, the task sheet asks before closing more than one task).
+- The older shape, a `subtasks` list inside each task, is still read: each subtask becomes a task with `parent`
+  (one that pointed at another task with `task` makes that task the part), and the chats tied to a subtask move
+  to it. The next write saves the new shape.
 - When the CLI creates `tasks.json`, it copies the `timeZone` of `goals.json`.
 
 ### Habits (`habits.json`)
@@ -220,8 +222,8 @@ compass task add "Water plants" --domain home --repeat "every 3 days"
 printf '%s\n' '"Pay the fee" --due +3' '"Book a room" --domain home' \
   | compass task add --stdin --domain studies   # several tasks, one commit; options here apply to every line
 compass task done "problem set"       # a task by id or part of its title
-compass task link "report" SESSION --title "Draft" [--parent SESSION] [--subtask outline]   # record a chat on a task
-compass task sub "trip" --add "Book flights" --domain studies   # a subtask that is its own task in another domain
+compass task link "report" SESSION --title "Draft" [--parent SESSION]   # record a chat on a task
+compass task add "Book flights" --parent "trip" --domain studies   # a part of a task (here in another domain)
 compass task chats "report"           # its chats as a tree (--prune a,b forgets the ones listed; unlink does the same)
 compass task brief "report"           # starter text for a new chat: title, notes, subtasks, date, chats
 compass task move "water" +2          # or: tomorrow (default), mon…sun, YYYY-MM-DD, none
