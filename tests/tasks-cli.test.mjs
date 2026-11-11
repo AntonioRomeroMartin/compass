@@ -384,6 +384,14 @@ test('linked subtasks: --add --domain creates the task, both close and reopen to
   run('task', 'sub', 'trip', '--remove', 'flights', '--yes');
   assert.deepEqual(saved().map((/** @type {any} */ t) => [t.title, t.status, t.subtasks.length]), [['Trip', 'open', 0], ['Book flights', 'dropped', 0]]);
 
+  // Dropping a task drops the tasks its subtasks are; undo brings them back.
+  run('task', 'sub', 'trip', '--add', 'Pack', '--domain', 'studies');
+  assert.match(run('task', 'drop', 'trip'), /also dropped: .* Pack/);
+  assert.match(run('task', 'show', 'trip', ), /\[-\] Pack/);
+  run('task', 'undo', 'trip');
+  assert.deepEqual(saved().filter((/** @type {any} */ t) => t.title !== 'Book flights').map((/** @type {any} */ t) => t.status), ['open', 'open']);
+  run('task', 'sub', 'trip', '--remove', 'pack', '--yes');
+
   // An existing task can be linked later, and unlinked with "none".
   run('task', 'add', 'Passport', '--domain', 'sport');
   run('task', 'sub', 'trip', '--add', 'Passport check');

@@ -26,6 +26,7 @@ export function taskRow(t, showArea = false, short = false) {
   const d = t.due ? daysUntil(t.due, new Date(), tz()) : null;
   const when = d === null ? null : d < 0 ? `${-d}d late` : d === 0 ? 'today' : d === 1 ? 'tomorrow' : t.due;
   const done = t.status !== 'open';
+  const steps = tasksLib.subtaskProgress(tasksStore.current(), t);
   return h(
     'li',
     { class: done ? 'task done' : 'task' },
@@ -34,7 +35,7 @@ export function taskRow(t, showArea = false, short = false) {
     h(
       'span',
       { class: 'task-meta' },
-      t.subtasks.length ? h('span', { class: 'chip muted' }, `${t.subtasks.filter((x) => x.done).length}/${t.subtasks.length}`) : null,
+      steps.total ? h('span', { class: 'chip muted' }, `${steps.done}/${steps.total}`) : null,
       showArea ? h('span', { class: 'chip muted' }, (short ? domainsLib.find(doms, domainsLib.canonical(doms, t.domain))?.name : domainsLib.label(doms, domainsLib.canonical(doms, t.domain))) || t.domain) : null,
       when ? h('span', { class: d !== null && d < 0 ? 'chip danger' : d === 0 ? 'chip warn' : 'chip' }, when) : null,
       t.repeat ? h('span', { class: 'chip muted', title: tasksLib.repeatText(t.repeat) }, '↻') : null,
@@ -146,6 +147,9 @@ export function openTaskForm(task, domain) {
   if (task) {
     if (task.status === 'open') {
       extra.append(h('button', { type: 'button', class: 'btn', onclick: () => {
+        // Open tasks that are subtasks of this one go with it (reopening it brings them back).
+        const along = task.subtasks.map((s) => tasksLib.linkedTask(tasksStore.current(), s)).filter((x) => x?.status === 'open');
+        if (along.length && !confirm(`Dropping it also drops: ${along.map((x) => x?.title).join(', ')}.`)) return;
         const stop = !!task.repeat && confirm('Stop repeating it too?\n\nOK: no more copies. Cancel: drop only this one.');
         tasksStore.dispatch([{ type: 'drop', id: task.id, at: new Date().toISOString(), today, nextId: task.repeat && !stop ? newId('t_') : null }]);
         dialog.close();
@@ -185,7 +189,12 @@ export function openTaskForm(task, domain) {
       /** @type {import('../../../lib/tasks.js').Op[]} */
       const ops = [
         { type: 'edit', id: task.id, fields },
-        ...old.filter((x) => !rows.some((r) => r.id === x.id)).map((x) => /** @type {const} */ ({ type: 'removeSub', id: task.id, subId: x.id })),
+        ...old.filter((x) => !rows.some((r) => r.id === x.id)).map((x) => {
+          // A step that is another task: that task is dropped with it, or lives on as a task of its own.
+          const other = tasksLib.linkedTask(tasksStore.current(), x);
+          const drop = other?.status === 'open' && confirm(`“${x.title}” is also a task. Drop that task too?\n\nOK: drop it. Cancel: keep it as a task of its own.`);
+          return /** @type {const} */ ({ type: 'removeSub', id: task.id, subId: x.id, ...(drop ? { at: new Date().toISOString(), today } : {}) });
+        }),
         ...rows.flatMap((r) => {
           const prev = old.find((x) => x.id === r.id);
           if (!prev) return [/** @type {const} */ ({ type: 'addSub', id: task.id, sub: { id: newId('s_'), title: r.title, done: false } })];

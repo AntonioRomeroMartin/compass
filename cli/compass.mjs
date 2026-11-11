@@ -86,8 +86,9 @@ Usage:
   compass task sub <task> --link <subtask> --task <other>|none
                                         a subtask that is another task (same or another domain): --add T --domain D
                                         creates that task; completing or reopening either does the same to the
-                                        other, dropping or deleting the task removes the subtask, removing the
-                                        subtask (--yes) drops the task; its chats move to that task
+                                        other, removing the subtask (--yes) drops the task, deleting the task
+                                        removes the subtask; dropping a task drops the tasks its subtasks are
+                                        (task undo brings them back); its chats move to that task
   compass task link <task> <session> [--title T] [--parent <session>] [--subtask <subtask>] [--move]
                                         record a chat session working on the task (--parent: the chat that
                                         opened it; --subtask: the subtask it is about, inherited by its
@@ -325,7 +326,8 @@ function taskLine(t, ctx, opts = {}) {
   if (t.due) bits.push(t.status === 'open' ? `due ${t.due} (${relDays(daysUntil(t.due, ctx.today, 'UTC'))})` : `due ${t.due}`);
   if (opts.domain !== false) bits.push(t.domain);
   if (t.repeat) bits.push(`↻ ${tasks.repeatText(t.repeat)}`);
-  if (t.subtasks.length) bits.push(`sub ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`);
+  const steps = tasks.subtaskProgress(ctx.tasks, t);
+  if (steps.total) bits.push(`sub ${steps.done}/${steps.total}`);
   if (t.sessions?.length) bits.push(`chats ${t.sessions.length}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
   if (t.event) bits.push(`for ${ctx.events.events.find((e) => e.id === t.event)?.title ?? t.event}`);
@@ -756,13 +758,9 @@ function task(ctx, sub, rest, flags) {
         build = (fresh) => {
           const cur = live(fresh);
           const other = tasks.linkedTask(fresh, cur.subtasks.find((x) => x.id === subId) ?? { id: '', title: '', done: false });
-          /** @type {import('../lib/tasks.js').Op[]} */
-          const ops = [str(flags.remove) ? { type: 'removeSub', id: tid, subId } : { type: 'toggleSub', id: tid, subId, done: !flags.undo }];
-          // The task that is the same thing follows: closed together, reopened together.
-          if (other && str(flags.remove) && other.status === 'open') ops.push({ type: 'drop', id: other.id, at, today: ctx.today, nextId: null });
-          else if (other && !str(flags.remove) && flags.undo && other.status !== 'open') ops.push({ type: 'reopen', id: other.id });
-          else if (other && !str(flags.remove) && !flags.undo && other.status === 'open') ops.push({ type: 'done', id: other.id, at, today: ctx.today, nextId: other.repeat ? newId('t_') : null });
-          return { tasks: ops };
+          // The task that is the same thing follows (lib/tasks.js): closed, reopened or dropped with the subtask.
+          if (str(flags.remove)) return { tasks: [{ type: 'removeSub', id: tid, subId, at, today: ctx.today }] };
+          return { tasks: [{ type: 'toggleSub', id: tid, subId, done: !flags.undo, at, today: ctx.today, nextId: other?.repeat ? newId('t_') : null }] };
         };
         break;
       }
@@ -809,6 +807,8 @@ function task(ctx, sub, rest, flags) {
     console.log(taskLine(saved, view));
     const next = saved.next ? fresh.tasks.find((x) => x.id === saved.next) : undefined;
     if (next) console.log(`next: ${taskLine(next, view)}`);
+    // Tasks that were its subtasks and went with it (`compass task undo` on one brings it back).
+    if (sub === 'drop') for (const x of fresh.tasks) if (x.id !== id && x.status === 'dropped' && x.doneAt === saved.doneAt) console.log(`also dropped: ${taskLine(x, view)}`);
   }
 }
 
@@ -859,7 +859,7 @@ function brief(t, ctx) {
   if (t.location) out.push(`Where: ${t.location}`);
   if (t.ongoing) out.push(`Work in progress: ${t.ongoing}`);
   if (t.notes) out.push('Notes:', ...t.notes.split('\n').map((l) => `  ${l}`));
-  if (t.subtasks.length) out.push('Subtasks:', ...t.subtasks.map((s) => `  ${s.done ? '[x]' : '[ ]'} ${s.title} [${s.id}]`));
+  if (t.subtasks.length) out.push('Subtasks:', ...t.subtasks.map((s) => `  ${SUB_MARK[tasks.subtaskState(ctx.tasks, s)]} ${s.title} [${s.id}]`));
   const chats = chatLines(t, '  ');
   if (chats.length) out.push('Chats already on it:', ...chats);
   console.log(out.join('\n'));
@@ -874,10 +874,13 @@ function focusFull(doc) {
   return fail(`already ${tasks.FOCUS_MAX} tasks with focus (unfocus one first):\n${list}`);
 }
 
+/** How a subtask is printed: done, to do, or a task that was dropped. */
+const SUB_MARK = { done: '[x]', open: '[ ]', dropped: '[-]' };
+
 /** @param {Task} t @param {Ctx} ctx */
 function showTask(t, ctx) {
   console.log(taskLine(t, ctx));
-  for (const s of t.subtasks) console.log(`  ${s.done ? '[x]' : '[ ]'} ${s.title} (${s.id})${s.task ? ` → task ${s.task}` : ''}`);
+  for (const s of t.subtasks) console.log(`  ${SUB_MARK[tasks.subtaskState(ctx.tasks, s)]} ${s.title} (${s.id})${s.task ? ` → task ${s.task}` : ''}`);
   if (t.notes) console.log(t.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
   const chats = chatLines(t, '  ');
   if (chats.length) console.log(['  chats:', ...chats].join('\n'));

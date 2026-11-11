@@ -412,7 +412,7 @@ test('chats: closing a task or an occurrence does not touch its chats; commit me
 
 // ---- Subtasks that are other tasks ----
 
-test('linked subtask: closing, reopening, dropping and deleting the task follow into the subtask', () => {
+test('linked subtask: closing, reopening and deleting the task follow into the subtask; dropping it keeps the link', () => {
   const link = (/** @type {string} */ id, /** @type {string} */ subId, /** @type {string|null} */ to) => /** @type {const} */ ({ type: 'linkSub', id, subId, task: to });
   let doc = tasks.applyOps(tasks.emptyDoc(), [
     { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b', { domain: 'other' }) },
@@ -431,13 +431,78 @@ test('linked subtask: closing, reopening, dropping and deleting the task follow 
   doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }]);
   assert.equal(a().subtasks[0].done, false);
   doc = tasks.applyOps(doc, [{ type: 'drop', id: 't_b', at, today: FRI, nextId: null }]);
-  assert.deepEqual(a().subtasks.map((s) => s.id), ['s_2']);
+  assert.deepEqual(a().subtasks.map((s) => [s.id, s.done]), [['s_1', false], ['s_2', false]]);
+  assert.equal(tasks.subtaskState(doc, a().subtasks[0]), 'dropped');
+  assert.deepEqual(tasks.subtaskProgress(doc, a()), { done: 0, total: 1 });
 
-  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }, link('t_a', 's_2', 't_b')]);
+  doc = tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }]);
+  assert.equal(tasks.subtaskState(doc, a().subtasks[0]), 'open');
   doc = tasks.applyOps(doc, [{ type: 'delete', id: 't_b' }]);
-  assert.deepEqual(a().subtasks.map((s) => s.id), []);
+  assert.deepEqual(a().subtasks.map((s) => s.id), ['s_2']);
+  doc = tasks.applyOps(doc, [{ type: 'removeSub', id: 't_a', subId: 's_2' }]);
   doc = tasks.applyOps(doc, [{ type: 'addSub', id: 't_a', sub: sub('s_3') }, link('t_a', 's_3', null)]);
   assert.equal(a().subtasks[0].task, undefined);
+});
+
+test('linked subtask: the task holds the state, whatever is done to the subtask', () => {
+  const at = '2026-11-05T00:00:00Z';
+  const base = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b', { repeat: { type: 'days', every: 7 }, due: FRI }) },
+    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' },
+  ]);
+  const state = (/** @type {import('../lib/tasks.js').TasksDoc} */ doc) => doc.tasks.map((t) => [t.id, t.status, ...t.subtasks.map((s) => s.done)]);
+
+  // Ticking the subtask completes the task (and creates its next occurrence); unticking reopens it.
+  let doc = tasks.applyOps(base, [{ type: 'toggleSub', id: 't_a', subId: 's_1', done: true, at, today: FRI, nextId: 't_n' }]);
+  assert.deepEqual(state(doc), [['t_a', 'open', true], ['t_b', 'done'], ['t_n', 'open']]);
+  doc = tasks.applyOps(doc, [{ type: 'toggleSub', id: 't_a', subId: 's_1', done: false }]);
+  assert.deepEqual(state(doc), [['t_a', 'open', false], ['t_b', 'open']]);
+  // Without `at` (a caller that does not know about linked subtasks) nothing is left out of step.
+  assert.deepEqual(state(tasks.applyOps(base, [{ type: 'toggleSub', id: 't_a', subId: 's_1', done: true }])), state(base));
+  // A stored copy that disagrees is put right by any batch.
+  const off = structuredClone(base);
+  off.tasks[0].subtasks[0].done = true;
+  assert.deepEqual(state(tasks.applyOps(off, [])), state(base));
+
+  // Removing the subtask: with `at` the task is dropped too, without it the task lives on.
+  assert.deepEqual(state(tasks.applyOps(base, [{ type: 'removeSub', id: 't_a', subId: 's_1', at, today: FRI }])), [['t_a', 'open'], ['t_b', 'dropped']]);
+  assert.deepEqual(state(tasks.applyOps(base, [{ type: 'removeSub', id: 't_a', subId: 's_1' }])), [['t_a', 'open'], ['t_b', 'open']]);
+});
+
+test('linked subtask: dropping a task drops the tasks its subtasks are, and reopening brings those back', () => {
+  const at = '2026-11-05T00:00:00Z';
+  const drop = (/** @type {string} */ id, when = at) => /** @type {const} */ ({ type: 'drop', id, at: when, today: FRI, nextId: null });
+  const base = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('t_a') }, { type: 'add', task: task('t_b') }, { type: 'add', task: task('t_c') }, { type: 'add', task: task('t_d') },
+    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' },
+    { type: 'addSub', id: 't_a', sub: sub('s_2') }, { type: 'linkSub', id: 't_a', subId: 's_2', task: 't_c' },
+    { type: 'addSub', id: 't_b', sub: sub('s_3') }, { type: 'linkSub', id: 't_b', subId: 's_3', task: 't_d' },
+  ]);
+  const status = (/** @type {import('../lib/tasks.js').TasksDoc} */ doc) => doc.tasks.map((t) => t.status).join(' ');
+
+  // t_c was dropped earlier: it goes down with t_a but does not come back with it; t_d is a subtask of a subtask.
+  let doc = tasks.applyOps(base, [drop('t_c', '2026-11-01T00:00:00Z'), drop('t_a')]);
+  assert.equal(status(doc), 'dropped dropped dropped dropped');
+  assert.equal(doc.tasks[0].subtasks.length, 2);
+  assert.equal(status(tasks.applyOps(doc, [{ type: 'reopen', id: 't_a' }])), 'open open dropped open');
+  // One of them can be brought back on its own.
+  assert.equal(status(tasks.applyOps(doc, [{ type: 'reopen', id: 't_b' }])), 'dropped open dropped open');
+
+  // A task that another open task has as a subtask stays; completing a task takes nothing with it.
+  doc = tasks.applyOps(base, [{ type: 'add', task: task('t_e') }, { type: 'addSub', id: 't_e', sub: sub('s_4') }, { type: 'linkSub', id: 't_e', subId: 's_4', task: 't_b' }, drop('t_a')]);
+  assert.equal(status(doc), 'dropped open dropped open open');
+  assert.equal(status(tasks.applyOps(base, [{ type: 'done', id: 't_a', at, today: FRI, nextId: null }])), 'done open open open');
+});
+
+test('linked subtask: the next occurrence of a repeating task gets plain subtasks', () => {
+  const at = '2026-11-05T00:00:00Z';
+  const doc = tasks.applyOps(tasks.emptyDoc(), [
+    { type: 'add', task: task('t_a', { repeat: { type: 'days', every: 1 }, due: FRI }) }, { type: 'add', task: task('t_b') },
+    { type: 'addSub', id: 't_a', sub: sub('s_1') }, { type: 'linkSub', id: 't_a', subId: 's_1', task: 't_b' },
+    { type: 'done', id: 't_b', at, today: FRI, nextId: null }, { type: 'done', id: 't_a', at, today: FRI, nextId: 't_n' },
+  ]);
+  assert.deepEqual(doc.tasks[0].subtasks, [{ ...sub('s_1'), done: true, task: 't_b' }]);
+  assert.deepEqual(doc.tasks[2].subtasks, [{ ...sub('s_1'), done: false }]);
 });
 
 test('linked subtask: its chats live in the other task', () => {
