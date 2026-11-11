@@ -339,7 +339,7 @@ test('chats: link, tree, move, unlink and prune', () => {
 });
 
 test('chats: closing a task leaves its chats for the agent to clean up; brief gives the starter text', () => {
-  const { run, read } = setupWithDomains();
+  const { run, runAll, read } = setupWithDomains();
   run('task', 'add', 'Write report', '--domain', 'sport', '--due', '2026-12-01', '--notes', 'Two pages.\nFor the course.', '--ongoing', 'ongoing/report.md');
   run('task', 'add', 'Outline', '--parent', 'report');
   run('task', 'link', 'report', 'local_1', '--title', 'Main chat');
@@ -350,6 +350,11 @@ test('chats: closing a task leaves its chats for the agent to clean up; brief gi
   // Still listed after closing: `chats` finds closed tasks too.
   assert.match(run('task', 'chats', 'report'), /Main chat \[local_1\]/);
   assert.equal(read('a', 'tasks.json').tasks[0].sessions.length, 1);
+  // Closed with chats: `today` lists it last, and no more chats can be linked to it.
+  assert.match(run('today'), /Closed tasks with chats[^\n]*\n {2}✓ \[t_\w+\] Write report .*chats 1/);
+  assert.match(runAll('task', 'link', 'report', 'local_2').stderr, /is done: chats go on open tasks/);
+  run('task', 'chats', 'report', '--prune', 'local_1');
+  assert.doesNotMatch(run('today'), /Closed tasks with chats/);
 });
 
 test('subtasks: --parent makes a part of a task, listed under it when it is a plain step', () => {

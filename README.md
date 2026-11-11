@@ -103,8 +103,10 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
   session in the assistant that runs it; `title` is a copy for display; `parent` is the chat that opened this one
   (`null`: opened from the task itself), which makes a tree ordered by `addedAt`. A chat about a part of a task is
   linked to that part, which is a task too. A chat belongs to one task. Compass only stores the links (the CLI and the
-  task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Unlinking a
-  chat moves its sub-chats up one level, and a repeating task's next occurrence starts with none.
+  task sheet show them; the sheet is read-only): opening and closing the chats is up to the assistant. Only open
+  tasks get chats, and `compass today` ends with the closed tasks that still have some, so the assistant can offer
+  to delete them. Unlinking a chat moves its sub-chats up one level, and a repeating task's next occurrence starts
+  with none.
 - `parent` (omitted at the top): the task this one is part of. A subtask is a task like any other, with its own
   domain (by default its parent's), date, chats and subtasks, to any depth. A plain step (open parent, no date,
   same domain) is listed under its task; anything else gets a line of its own that names its task. Closing a task
