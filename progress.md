@@ -34,7 +34,8 @@
   active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
   (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
 - Chats linked to tasks (`task.sessions`; `link`/`unlink`/`relink` ops): CLI `task link|unlink|chats|brief`, a
-  read-only tree in the task sheet. Subtasks are tasks with `parent` (any domain, any depth; CLI `task add|edit
+  read-only tree in the task sheet; a chat can be on several tasks, a parent shows its parts' chats, and closing a
+  task lets go of the chats an open task still has. Subtasks are tasks with `parent` (any domain, any depth; CLI `task add|edit
   --parent`): plain steps are listed under their task, closing a task closes what is under it and reopening brings
   it back. The older `subtasks` list is read and converted on the next write.
 - Tests: `node --test tests/*.test.mjs`, also run by GitHub on every PR.

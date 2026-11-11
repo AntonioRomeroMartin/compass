@@ -75,7 +75,8 @@ export function taskRows(t, showArea = false, short = false, depth = 0) {
 }
 
 /**
- * Fills the read-only list of a task's chats (nested by who opened whom) and shows or hides its box.
+ * Fills the read-only list of a task's chats (nested by who opened whom), then those of its parts under each part's
+ * title, and shows or hides its box.
  * @param {HTMLElement} list @param {Task} [task]
  */
 function chatTree(list, task) {
@@ -84,7 +85,9 @@ function chatTree(list, task) {
     return h('li', {}, h('span', {}, chat.title || 'Untitled chat'),
       children.length ? h('ul', { class: 'chat-tree' }, ...items(children)) : null);
   });
-  list.replaceChildren(...(task ? items(tasksLib.chatTree(task)) : []));
+  const below = task ? tasksLib.chatsBelow(tasksStore.current(), task.id) : [];
+  list.replaceChildren(...(task ? items(tasksLib.chatTree(task)) : []),
+    ...below.map(({ task: part, tree }) => h('li', {}, h('span', { class: 'part' }, part.title), h('ul', { class: 'chat-tree' }, ...items(tree)))));
   /** @type {HTMLElement} */ (list.parentElement).hidden = !list.children.length;
 }
 

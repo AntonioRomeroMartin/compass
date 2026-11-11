@@ -325,8 +325,14 @@ test('chats: link, tree, move, unlink and prune', () => {
   assert.match(runAll('task', 'link', 'report', 'local_9', '--parent', 'local_x').stderr, /not a chat of this task/);
   assert.match(runAll('task', 'link', 'report').stderr, /which chat session/);
   assert.match(runAll('task', 'chats', 'report', '--prune').stderr, /needs session ids/);
-  // Already linked elsewhere: ignored, unless --move.
-  assert.match(run('task', 'link', 'trip', 'local_1'), /^No change/);
+  // Already on this task: said, nothing written. On another task: on both, each one naming the other.
+  const again = runAll('task', 'link', 'report', 'local_1');
+  assert.match(again.stderr, /already a chat of this task/);
+  assert.match(again.stdout, /^No change/);
+  run('task', 'link', 'trip', 'local_1', '--title', 'Main chat');
+  assert.match(run('task', 'chats', 'trip'), /^- Main chat \[local_1\] \(also in: Write report \[t_\w+\]\)\n$/);
+  run('task', 'unlink', 'trip', 'local_1');
+  // --move takes it from the others.
   run('task', 'link', 'trip', 'local_1', '--title', 'Main chat', '--move');
   assert.deepEqual(saved().map((/** @type {any} */ t) => (t.sessions ?? []).map((/** @type {any} */ c) => c.id)), [['local_2', 'local_3'], ['local_1']]);
   assert.deepEqual(saved()[0].sessions.map((/** @type {any} */ c) => c.parent), [null, 'local_2']);
@@ -355,6 +361,22 @@ test('chats: closing a task leaves its chats for the agent to clean up; brief gi
   assert.match(runAll('task', 'link', 'report', 'local_2').stderr, /is done: chats go on open tasks/);
   run('task', 'chats', 'report', '--prune', 'local_1');
   assert.doesNotMatch(run('today'), /Closed tasks with chats/);
+});
+
+test('chats: a parent shows its parts\' chats; closing keeps a chat that another open task has', () => {
+  const { run, read } = setupWithDomains();
+  run('task', 'add', 'Write report', '--domain', 'sport');
+  run('task', 'add', 'Outline', '--parent', 'report');
+  run('task', 'add', 'Plan trip', '--domain', 'sport');
+  run('task', 'link', 'report', 'local_1', '--title', 'Main chat');
+  run('task', 'link', 'outline', 'local_2', '--title', 'Outline chat');
+  run('task', 'link', 'trip', 'local_2', '--title', 'Outline chat');
+  assert.match(run('task', 'chats', 'report'), /^- Main chat \[local_1\]\n- part “Outline” \[t_\w+\]:\n {2}- Outline chat \[local_2\] \(also in: Plan trip \[t_\w+\]\)\n$/);
+  assert.match(run('task', 'show', 'report'), /chats 1 \(\+1 in parts\)/);
+  run('task', 'done', 'report');
+  const saved = read('a', 'tasks.json').tasks;
+  assert.deepEqual(saved.map((/** @type {any} */ t) => (t.sessions ?? []).map((/** @type {any} */ c) => c.id)), [['local_1'], [], ['local_2']]);
+  assert.match(run('today'), /Closed tasks with chats[^\n]*\n {2}✓ \[t_\w+\] Write report — sport · sub 1\/1 · chats 1 · done/);
 });
 
 test('subtasks: --parent makes a part of a task, listed under it when it is a plain step', () => {

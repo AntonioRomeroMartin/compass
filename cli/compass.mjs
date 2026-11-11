@@ -87,8 +87,8 @@ Usage:
   compass task edit <task> [--title T] [--domain D] [--due DATE] [--repeat RULE] [--parent <task>]
                    [--ongoing PATH] [--notes T] [--location T] [--event E]   (none clears a field)
   compass task link <task> <session> [--title T] [--parent <session>] [--move]
-                                        record a chat session working on the task (--parent: the chat that
-                                        opened it; --move: take it from another task)
+                                        record a chat session working on the task; a chat can be on several
+                                        (--parent: the chat that opened it; --move: take it from the others)
   compass task unlink <task> <session>…  forget chats (their sub-chats move up one level)
   compass task chats <task> [--prune <session>[,…]]
                                         the task's chats as a tree; --prune forgets the ones listed
@@ -326,7 +326,8 @@ function taskLine(t, ctx, opts = {}) {
   const steps = tasks.progress(ctx.tasks, t);
   if (steps.total) bits.push(`sub ${steps.done}/${steps.total}`);
   if (parent) bits.push(`part of ${parent.title}`);
-  if (t.sessions?.length) bits.push(`chats ${t.sessions.length}`);
+  const below = tasks.chatsBelow(ctx.tasks, t.id).reduce((n, b) => n + (b.task.sessions?.length ?? 0), 0);
+  if (t.sessions?.length || below) bits.push(`chats ${t.sessions?.length ?? 0}${below ? ` (+${below} in parts)` : ''}`);
   if (t.ongoing) bits.push(`ongoing ${t.ongoing}`);
   if (t.event) bits.push(`for ${ctx.events.events.find((e) => e.id === t.event)?.title ?? t.event}`);
   if (t.location) bits.push(`@ ${t.location}`);
@@ -778,6 +779,10 @@ function task(ctx, sub, rest, flags) {
           const cur = live(fresh);
           if (cur.status !== 'open') fail(`“${cur.title}” is ${cur.status}: chats go on open tasks (reopen it first: compass task undo)`);
           if (parent && !cur.sessions?.some((c) => c.id === parent)) fail(`“${parent}” is not a chat of this task (link it first)`);
+          if (cur.sessions?.some((c) => c.id === session)) {
+            console.error(`“${session}” is already a chat of this task`);
+            return { tasks: [] };
+          }
           const chat = { id: session, title, parent: parent ?? null, addedAt: at };
           return { tasks: [{ type: flags.move ? 'relink' : 'link', id: tid, chat }] };
         };
@@ -790,7 +795,7 @@ function task(ctx, sub, rest, flags) {
       case 'chats': {
         const gone = (str(flags.prune) ?? '').split(/[\s,]+/).filter(Boolean);
         if (flags.prune === true || (str(flags.prune) !== undefined && !gone.length)) fail('--prune needs session ids: --prune a,b');
-        if (!gone.length) return showChats(t);
+        if (!gone.length) return showChats(t, ctx.tasks);
         build = () => ({ tasks: [{ type: 'unlink', id: tid, sessions: gone }] });
         break;
       }
@@ -820,26 +825,33 @@ function task(ctx, sub, rest, flags) {
 }
 
 /**
- * The chats of a task as an indented tree (nothing printed if it has none).
- * @param {Task} t @param {string} [indent]
+ * The chats of a task as an indented tree, then those of its parts under each part's title (nothing if none).
+ * A chat that is also on another task says which.
+ * @param {Task} t @param {TasksDoc} doc @param {string} [indent]
  */
-function chatLines(t, indent = '') {
+function chatLines(t, doc, indent = '') {
   /** @type {string[]} */
   const lines = [];
-  /** @param {ReturnType<typeof tasks.chatTree>} nodes @param {number} depth */
-  const walk = (nodes, depth) => {
+  const here = new Set([t.id, ...tasks.descendants(doc, t.id).map((d) => d.id)]);
+  /** @param {ReturnType<typeof tasks.chatTree>} nodes @param {number} depth @param {Task} of */
+  const walk = (nodes, depth, of) => {
     for (const { chat, children } of nodes) {
-      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]`);
-      walk(children, depth + 1);
+      const also = tasks.tasksOfChat(doc, chat.id, of.id).filter((x) => !here.has(x.id));
+      lines.push(`${indent}${'  '.repeat(depth)}- ${chat.title || '(untitled)'} [${chat.id}]${also.length ? ` (also in: ${also.map((x) => `${x.title} [${x.id}]`).join(', ')})` : ''}`);
+      walk(children, depth + 1, of);
     }
   };
-  walk(tasks.chatTree(t), 0);
+  walk(tasks.chatTree(t), 0, t);
+  for (const { task, tree } of tasks.chatsBelow(doc, t.id)) {
+    lines.push(`${indent}- part “${task.title}” [${task.id}]:`);
+    walk(tree, 1, task);
+  }
   return lines;
 }
 
-/** @param {Task} t */
-function showChats(t) {
-  const lines = chatLines(t);
+/** @param {Task} t @param {TasksDoc} doc */
+function showChats(t, doc) {
+  const lines = chatLines(t, doc);
   console.log(lines.length ? lines.join('\n') : `No chats linked to “${t.title}”.`);
 }
 
@@ -856,7 +868,7 @@ function brief(t, ctx) {
   if (parent) out.splice(1, 0, `Part of: ${parent.title} [${parent.id}]`);
   const under = treeLines(t, ctx, '  ');
   if (under.length) out.push('Subtasks:', ...under);
-  const chats = chatLines(t, '  ');
+  const chats = chatLines(t, ctx.tasks, '  ');
   if (chats.length) out.push('Chats already on it:', ...chats);
   console.log(out.join('\n'));
 }
@@ -876,7 +888,7 @@ function showTask(t, ctx) {
   const under = treeLines(t, ctx, '  ');
   if (under.length) console.log(under.join('\n'));
   if (t.notes) console.log(t.notes.split('\n').map((l) => `  | ${l}`).join('\n'));
-  const chats = chatLines(t, '  ');
+  const chats = chatLines(t, ctx.tasks, '  ');
   if (chats.length) console.log(['  chats:', ...chats].join('\n'));
 }
 
