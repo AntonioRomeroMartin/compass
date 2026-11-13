@@ -74,8 +74,8 @@ Period keys (`YYYY-MM-DD`, `YYYY-Www` ISO week, `YYYY-MM`, `YYYY-Qn`, `YYYY`) ar
 - **Blocks of an area's page:** tasks, goals and habits show in every area, even empty. Sources (and events, trades,
   finance) show only in the areas that have some (a domain and its subdomains).
 - A folder belongs to the domain with the **longest** path that contains it (`~/projects/studies/course-a/week-3`
-  → `studies/course-a`; whole folder names only). `compass today` scoped to a domain shows it in full and only the
-  agenda of its sub-domains with folders of their own, not its parents (see below).
+  → `studies/course-a`; whole folder names only). `compass today` scoped to a domain shows it and its sub-domains in full,
+  not its parents (see below).
 
 ### Tasks (`tasks.json`)
 
@@ -252,7 +252,7 @@ compass help                          # every command (goals, sub-tasks, focus, 
 
 ```text
 Today · Fri 23 Oct · 2026-10-23 · 2026-W43 (Area/City)
-Scope: Studies [studies] in full + agenda of Studies › Course A (from --cwd)
+Scope: Studies [studies] and its sub-domains in full (from --cwd)
 Focus
   ⭐ [t_…] Exam registration — due 2026-10-24 (tomorrow) · studies
 Studies [studies]
@@ -262,16 +262,16 @@ Studies [studies]
   · [t_…] Choose next term's courses — due 2026-12-10 (in 48 d)
   No date
   · [t_…] Thesis draft — ongoing notes/thesis.md
-Studies › Course A [studies/course-a] · agenda only
+Studies › Course A [studies/course-a]
   · [t_…] Problem set 3 — due 2026-10-25 (in 2 d)
 ```
 
 It shows the focus tasks, then by domain: tasks that are late, due today or in the next 7 days, goals of the day and
-the week, and deadlines within 7 days. With a scope (`--cwd` or `--domain`), its own part is shown in full: the domain
-and its sub-domains without paths of their own, with the tasks dated later ("Later"), those without a date ("No
-date") and every active goal. Its sub-domains with their own paths (they have their own folder) are agenda only, and
-its parents are left out (their own view shows it). A **root folder** (`compass domains root PATH`, stored as `root` in `domains.json`) is the one whose
-session oversees everything: from it, every other domain is agenda too. Without a scope it shows everything, dated
+the week, and deadlines within 7 days. With a scope (`--cwd` or `--domain`), the domain and all its sub-domains are
+shown in full, with the tasks dated later ("Later"), those without a date ("No date") and every active goal: the same
+tasks as `compass tasks` with that scope. Its parents are left out (their own view shows it). A **root folder**
+(`compass domains root PATH`, stored as `root` in `domains.json`) is the one whose session oversees everything: from
+it, every domain is shown in full. Without a scope it shows everything, dated
 only. Its `git pull` gives up after `--timeout` seconds (3 by default) and the view uses the local copy, with a
 one-line warning.
 

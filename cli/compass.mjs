@@ -63,11 +63,11 @@ const HELP = `compass — goals, tasks, events, habits, sources, journal, trades
 
 Usage:
   compass today [--domain D | --cwd PATH] [--timeout S]
-                                        focus, then by domain: events and tasks late/today/next 7 days, goals.
-                                        With a domain: in full (also tasks dated later and without a date, every
-                                        active goal); its sub-domains with paths, agenda only (not its
-                                        parents); from the root folder, every other domain too
-                                        of the day and week, deadlines within 7 days, ongoing work; last,
+                                        focus, then by domain: events and tasks late/today/next 7 days, goals
+                                        of the day and week, deadlines within 7 days, ongoing work. With a
+                                        domain: it and all its sub-domains in full (also tasks dated later and
+                                        without a date, every active goal; the same tasks as compass tasks),
+                                        not its parents; from the root folder, every domain in full. Last,
                                         closed tasks that still have chats linked
   compass tasks [--domain D | --cwd PATH] [--due today|week|overdue] [--all] [--archived]
                                         --archived: closed tasks moved to tasks-YYYY.json (after 30 days)
@@ -173,7 +173,7 @@ Usage:
   compass money saving <goal> networth|saved <target> | none   the goal's progress from net worth
   compass money area <domain>           the area whose page shows the budget
   compass domains
-  compass domains root PATH|none        the root folder (its chat sees the agenda of every domain)
+  compass domains root PATH|none        the root folder (its chat sees every domain in full)
   compass domain add <id> [--name N] [--parent P] [--path DIR…] [--color C]
   compass domain edit <id> [--name N] [--color C|none] [--add-path DIR…] [--remove-path DIR…]
                    [--calendar ID|none] [--calendar-color N|none]   (calendar of its events; inherited)
@@ -518,11 +518,8 @@ function today(ctx, flags) {
   const date = new Intl.DateTimeFormat('en-GB', { timeZone: ctx.tz, weekday: 'short', day: 'numeric', month: 'short' }).format(ctx.now);
   console.log(`Today · ${date} · ${view.date} · ${view.week} (${ctx.tz})`);
   if (scope.id) {
-    const sc = domains.chatScope(ctx.domains, scope.id, scope.root);
-    // Named: the sub-domains with paths right under its own part (not what is below those).
-    const tops = [...sc.agenda].filter((id) => sc.own.has(domains.find(ctx.domains, id)?.parent ?? ''));
-    const agenda = scope.root ? 'every other domain' : tops.map((id) => domains.label(ctx.domains, id)).join(', ');
-    const what = `${domains.label(ctx.domains, scope.id)} [${scope.id}] in full${agenda ? ` + agenda of ${agenda}` : ''}`;
+    const subs = domains.children(ctx.domains, scope.id).length ? ' and its sub-domains' : '';
+    const what = scope.root ? 'every domain in full' : `${domains.label(ctx.domains, scope.id)} [${scope.id}]${subs} in full`;
     console.log(`Scope: ${what}${scope.note ? ` (${scope.note})` : ''}`);
   } else if (scope.note) console.log(`Scope: everything (${scope.note})`);
   if (view.focus.length || view.focusElsewhere) {
@@ -535,7 +532,7 @@ function today(ctx, flags) {
   if (cal) console.log(`Calendar: ${cal} (compass calendar)`);
   for (const g of view.groups) {
     const id = g.domain && g.label !== g.domain ? ` [${g.domain}]` : '';
-    console.log(`${g.label}${id}${g.agenda ? ' · agenda only' : ''}`);
+    console.log(`${g.label}${id}`);
     for (const e of g.events) console.log(`  ${eventLine(e, ctx, { domain: false })}`);
     for (const t of g.tasks) console.log(taskLines(t, ctx, { domain: false }, '  ').join('\n'));
     for (const goal of g.goals) console.log(`  ${goalLine(goal, ctx.now, ctx.gtz)}`);
@@ -926,7 +923,7 @@ function listDomains(ctx) {
   };
   for (const d of doc.domains) if (!d.parent || !domains.find(doc, d.parent)) print(d, 0);
   for (const d of doc.domains) print(d, 0); // left out by a cycle
-  if (doc.root) console.log(`root folder: ${doc.root} (its chat sees the agenda of every domain)`);
+  if (doc.root) console.log(`root folder: ${doc.root} (its chat sees every domain in full)`);
   const loose = [...new Set([...ctx.goals.goals.map((g) => g.category), ...ctx.tasks.tasks.map((t) => t.domain), ...ctx.habits.habits.map((h) => h.domain), ...ctx.sources.sources.map((s) => s.domain), ...ctx.events.events.map((e) => e.domain)])]
     .filter((c) => c && !domains.domainOfCategory(doc, c));
   if (doc.domains.length && loose.length) console.log(`Not registered (used by goals, tasks, habits or sources): ${loose.join(', ')}`);

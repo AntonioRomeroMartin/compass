@@ -30,9 +30,9 @@
   card. CLI `compass trades|trade` (`cli/trades.mjs`; `trade add` stands in for the import). Commit messages only count.
 - Local preview with sample data: `node tools/demo.mjs DIR`, then `python3 tools/serve.py 8767 --demo DIR` and open
   `/?demo` (a stand-in for GitHub's API on the same server; never touches a real data repo).
-- `compass today --cwd PATH`: the folder's domain in full (tasks late/today/7 days, then Later and No date, every
-  active goal); its sub-domains with their own paths, agenda only (not its parents); from the root folder
-  (`compass domains root PATH`, `root` in domains.json), every other domain's agenda too.
+- `compass today --cwd PATH`: the folder's domain and all its sub-domains in full (tasks late/today/7 days, then
+  Later and No date, every active goal; the same tasks as `compass tasks --cwd`), not its parents; from the root
+  folder (`compass domains root PATH`, `root` in domains.json), every domain in full.
 - Chats linked to tasks (`task.sessions`; `link`/`unlink`/`relink` ops): CLI `task link|unlink|chats|brief`, a
   read-only tree in the task sheet; a chat can be on several tasks, a parent shows its parts' chats, and a closed
   task keeps its chats (`today` only offers to delete those no open task has). Subtasks are tasks with `parent` (any domain, any depth; CLI `task add|edit
